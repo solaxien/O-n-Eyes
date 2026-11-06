@@ -1,0 +1,38 @@
+name: Build Android benchmark
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  arm64:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch the pinned runtime
+        run: |
+          git clone --depth 1 --branch master-1052-f5df5f8 https://github.com/leejet/stable-diffusion.cpp.git .tools/sd
+          git -C .tools/sd submodule update --init --depth 1 ggml
+      - name: Install host shader tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y glslc libvulkan-dev spirv-headers ninja-build
+      - name: Compile the ARM64 runner
+        run: |
+          ndk="${ANDROID_NDK_LATEST_HOME:?Android NDK is required}"
+          sysroot="$ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          cmake -S android -B .runs/android-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DSD_SOURCE="$PWD/.tools/sd" \
+            -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DANDROID_STL=c++_static \
+            -DVulkan_GLSLC_EXECUTABLE=/usr/bin/glslc \
+            -DVulkan_INCLUDE_DIR="$sysroot/usr/include" \
+            -DVulkan_LIBRARY="$sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so"
+          cmake --build .runs/android-build --target p3-native --parallel 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p3-native-android-arm64
+          path: .runs/android-build/p3-native
+          if-no-files-found: error

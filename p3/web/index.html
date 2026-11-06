@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="P3 Image Lab by O(n) Eyes. Generate and compare images using compact diffusion and classical computer vision.">
+  <meta name="theme-color" content="#101717">
+  <title>P3 Image Lab · O(n) Eyes</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="mast-inner">
+      <a class="brand" href="/" aria-label="P3 Image Lab home">
+        <svg viewBox="0 0 32 32" width="36" height="36" aria-hidden="true">
+          <path d="M3 16c3.8-5.3 8.1-8 13-8s9.2 2.7 13 8c-3.8 5.3-8.1 8-13 8S6.8 21.3 3 16Z"/>
+          <circle cx="16" cy="16" r="4"/>
+        </svg>
+        <span><strong>O(n) Eyes</strong><small>T38 · P3 Image Lab</small></span>
+      </a>
+      <nav aria-label="Image Lab views">
+        <button class="nav-button" data-view="generate" type="button" aria-pressed="true">Generate</button>
+        <button class="nav-button" data-view="benchmarks" type="button" aria-pressed="false">Benchmarks</button>
+      </nav>
+      <span id="worker" class="worker" data-state="loading"><i></i><span id="worker-label">Loading model</span></span>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section id="generate-view" aria-labelledby="generate-title">
+      <div class="intro">
+        <p class="eyebrow">Compact diffusion · OpenCV</p>
+        <h1 id="generate-title">Generate an image</h1>
+        <p>Describe the scene, then compare the raw decode with the vision pass.</p>
+      </div>
+      <div class="workbench">
+        <form id="generation-form" class="panel controls">
+          <div class="section-top"><label for="prompt" class="section-label">Prompt</label><span class="micro">CLIP text encoder</span></div>
+          <textarea id="prompt" name="prompt" minlength="3" maxlength="1000" rows="5" required spellcheck="true" placeholder="Describe the objects, their colors, and where they appear…"></textarea>
+          <div class="samples">
+            <span class="micro">Try a scene</span>
+            <div class="sample-buttons">
+              <button type="button" data-example="A product photograph of a red apple to the left of a blue cup on a white tabletop. Soft window light.">Color &amp; position</button>
+              <button type="button" data-example="A studio photograph of exactly two yellow bananas beside one red apple on a dark green table.">Object count</button>
+              <button type="button" data-example="A blue umbrella above a red bench with a green backpack on the bench, photographed in light rain.">Three objects</button>
+            </div>
+          </div>
+          <div class="control-grid">
+            <label class="field">Generation mode
+              <select id="mode" name="mode">
+                <option value="auto">Auto · fits your budget</option>
+                <option value="balanced">Balanced</option>
+                <option value="quality">Full quality · 20 steps</option>
+                <option value="eco">Low resource</option>
+              </select>
+            </label>
+            <label class="field">Seed <span class="micro">optional</span>
+              <input type="number" id="seed" name="seed" min="0" max="4294967295" step="1" placeholder="Random">
+            </label>
+          </div>
+          <button id="generate" type="submit" class="primary" disabled>
+            <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><path d="m10 2 1.8 6.2L18 10l-6.2 1.8L10 18l-1.8-6.2L2 10l6.2-1.8L10 2Z"/></svg>
+            Generate image
+          </button>
+          <p id="error" class="error" role="alert" hidden></p>
+          <p class="worker-note" id="worker-note">The worker loads the checkpoint on startup.</p>
+        </form>
+
+        <section class="panel preview" aria-labelledby="output-title">
+          <div class="section-top">
+            <h2 id="output-title" class="section-label">Output</h2>
+            <div id="image-toggle" class="image-toggle" aria-label="Output version" hidden>
+              <button data-image="raw" aria-pressed="false" type="button">Raw</button>
+              <button data-image="enhanced" aria-pressed="true" type="button">Enhanced</button>
+            </div>
+          </div>
+          <div class="image-frame">
+            <img id="result-image" alt="" hidden>
+            <div id="placeholder">
+              <svg viewBox="0 0 60 60" width="54" height="54" aria-hidden="true">
+                <path d="M5 21V5h16m18 0h16v16m0 18v16H39m-18 0H5V39"/>
+                <path d="M15 39l11-11 8 8 5-5 7 8H15Z"/><circle cx="39" cy="22" r="4"/>
+              </svg>
+              <p id="stage" role="status">Your image will appear here</p>
+              <progress id="progress" max="100" value="0" aria-label="Generation progress" hidden></progress>
+            </div>
+          </div>
+          <div id="result-details" hidden>
+            <dl class="readouts">
+              <div><dt>Submit to image</dt><dd id="elapsed"></dd></div>
+              <div><dt>Sampling</dt><dd id="steps"></dd></div>
+              <div><dt>Native resolution</dt><dd id="size"></dd></div>
+            </dl>
+            <div class="result-actions">
+              <p id="seed-result" class="micro"></p>
+              <a id="download" class="download" download="p3-image.webp">Download WebP <span aria-hidden="true">↓</span></a>
+            </div>
+            <details><summary>Run details</summary><dl id="run-details" class="detail-list"></dl></details>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="benchmarks-view" aria-labelledby="benchmark-title" hidden>
+      <div class="intro">
+        <p class="eyebrow">Paired prompts and seeds</p>
+        <h1 id="benchmark-title">Benchmarks</h1>
+        <p>Compare the uncompressed baseline, model optimizations, and classical vision stages.</p>
+      </div>
+      <p id="evidence-status" role="status">Loading measured results…</p>
+      <div id="evidence" class="evidence"></div>
+    </section>
+  </main>
+  <footer class="shell footer"><span>O(n) Eyes · Team T38</span><span>Resource-efficient text-to-image generation</span></footer>
+</body>
+</html>

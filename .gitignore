@@ -1,0 +1,16 @@
+.venv/
+.models/
+.cache/
+.tools/
+.runs/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.env.*
+*.safetensors
+!p3/weights/t38-coco.safetensors
+*.gguf
+*.onnx
+*.zip
+*.log
