@@ -86,19 +86,26 @@ class Generator:
         decoder: str = "vae",
         adapter: Path | None = None,
         weight_precision: str | None = None,
+        check_safety: bool = True,
     ):
         if device == "cpu" and precision == "fp16":
             raise ValueError("Use FP32 on the CPU")
+        if decoder not in {"vae", "taesd"}:
+            raise ValueError("Choose vae or taesd for the decoder")
         self.checkpoint = checkpoint
         self.device = device
         self.precision = precision
         self.weight_precision = weight_precision or precision
         self.decoder = decoder
         self.adapter = adapter
+        self.check_safety = check_safety
         self.dtype = torch.float16 if precision == "fp16" else torch.float32
         if device == "cpu":
             torch.set_num_threads(min(torch.get_num_threads(), 8))
-        model_dir, self.model_bytes = resolve_model(checkpoint, self.weight_precision)
+        model_dir, self.model_bytes = resolve_model(checkpoint, self.weight_precision, include_safety=check_safety)
+        safety_options = {} if check_safety else {
+            "safety_checker": None, "feature_extractor": None, "requires_safety_checker": False,
+        }
         started = perf_counter()
         self.pipe = StableDiffusionPipeline.from_pretrained(
             model_dir,
@@ -106,6 +113,7 @@ class Generator:
             use_safetensors=True,
             variant="fp16" if self.weight_precision == "fp16" else None,
             torch_dtype=self.dtype,
+            **safety_options,
         )
         if decoder == "taesd":
             taesd_dir, taesd_bytes = resolve_taesd()
@@ -197,9 +205,10 @@ class Generator:
         decoded = pipe.vae.decode(latents / pipe.vae.config.scaling_factor, return_dict=False)[0]
         if not torch.isfinite(decoded).all().item():
             raise GenerationError("The decoder produced invalid pixels. Try a different seed.")
-        decoded, blocked = pipe.run_safety_checker(decoded, self.device, embeddings.dtype)
-        if blocked and blocked[0]:
-            raise GenerationError("The checkpoint's safety checker blocked the result. Try a different prompt.")
+        if self.check_safety:
+            decoded, blocked = pipe.run_safety_checker(decoded, self.device, embeddings.dtype)
+            if blocked and blocked[0]:
+                raise GenerationError("The checkpoint's safety checker blocked the result. Try a different prompt.")
         raw = pipe.image_processor.postprocess(decoded, output_type="pil")[0]
         decode_ms = self._elapsed(decode_start)
 
@@ -217,6 +226,7 @@ class Generator:
             "precision": self.precision,
             "weight_precision": self.weight_precision,
             "decoder": self.decoder,
+            "safety_check": self.check_safety,
             "adapter": self.adapter.name if self.adapter else None,
             "scheduler": type(scheduler).__name__,
             "profile": profile.name,

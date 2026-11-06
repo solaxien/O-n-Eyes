@@ -15,6 +15,7 @@ jobs:
         run: |
           git clone --depth 1 --branch master-1052-f5df5f8 https://github.com/leejet/stable-diffusion.cpp.git .tools/sd
           git -C .tools/sd submodule update --init --depth 1 ggml
+          git clone --depth 1 --branch v1.4.335 https://github.com/KhronosGroup/Vulkan-Headers.git .tools/vulkan-headers
       - name: Install host shader tools
         run: |
           sudo apt-get update
@@ -30,7 +31,7 @@ jobs:
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DANDROID_STL=c++_static \
             -DSPIRV-Headers_DIR="$(dirname "$spirv_config")" \
             -DVulkan_GLSLC_EXECUTABLE=/usr/bin/glslc \
-            -DVulkan_INCLUDE_DIR="$sysroot/usr/include" \
+            -DVulkan_INCLUDE_DIR="$PWD/.tools/vulkan-headers/include" \
             -DVulkan_LIBRARY="$sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so"
           cmake --build .runs/android-build --target p3-native --parallel 3
       - uses: actions/upload-artifact@v4

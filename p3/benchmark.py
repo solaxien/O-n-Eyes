@@ -89,10 +89,14 @@ def run_variant(variant_id: str, rows: list[dict], destination: Path, device: st
         raise ValueError("This variant requires --adapter pointing to the trained COCO LoRA.")
     root = destination / variant_id
     root.mkdir(parents=True, exist_ok=True)
+    if device == "cuda" and variant.precision == "fp32":
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
     with sample_rss() as cold_peak:
         generator = Generator(
             variant.checkpoint, variant.precision, device,
             decoder=variant.decoder, adapter=adapter if variant.lora else None,
+            check_safety=False,
         )
     profile = Profile(variant.label, variant.steps, variant.size, variant.scheduler)
     with sample_rss() as first_peak:
@@ -118,6 +122,7 @@ def run_variant(variant_id: str, rows: list[dict], destination: Path, device: st
         "decoder": first.metadata["decoder"],
         "adapter": first.metadata["adapter"],
         "native_size": first.metadata["native_size"],
+        "safety_check": first.metadata["safety_check"],
     })
     for directory in ("runs", "images", "raw"):
         (root / directory).mkdir(exist_ok=True)
