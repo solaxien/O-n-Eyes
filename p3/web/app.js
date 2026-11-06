@@ -19,7 +19,7 @@ const score = (value) => Number.isFinite(value) ? value.toFixed(4) : "—";
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function json(url, options) {
-  const response = await fetch(url, { cache: "no-store", ...options });
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(12000), ...options });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(typeof body.detail === "string" ? body.detail : "Request failed (" + response.status + ").");
@@ -111,6 +111,7 @@ form.addEventListener("submit", async (event) => {
   const seed = byId("seed").value;
   const started = performance.now();
   busy = generate.disabled = true;
+  byId("generate-label").textContent = "Generating image…";
   error.hidden = output.hidden = byId("result-details").hidden = byId("image-toggle").hidden = true;
   byId("placeholder").hidden = meter.hidden = false;
   stage.textContent = "Submitting prompt";
@@ -137,12 +138,14 @@ form.addEventListener("submit", async (event) => {
     await showImage("enhanced");
     output.hidden = false;
     byId("placeholder").hidden = true;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     byId("elapsed").textContent = seconds(performance.now() - started);
     byId("steps").textContent = result.metadata.steps + " calls";
     byId("size").textContent = result.metadata.native_size + " × " + result.metadata.native_size;
     byId("seed-result").textContent = "Seed " + result.metadata.seed;
     renderDetails(result.metadata);
     byId("result-details").hidden = byId("image-toggle").hidden = false;
+    if (matchMedia("(max-width: 720px)").matches) output.scrollIntoView({ block: "center" });
   } catch (err) {
     reportError(err);
     stage.textContent = "Ready for another prompt";
@@ -150,6 +153,7 @@ form.addEventListener("submit", async (event) => {
   } finally {
     busy = false;
     generate.disabled = !ready;
+    byId("generate-label").textContent = "Generate image";
   }
 });
 
@@ -159,7 +163,7 @@ function resultTable(group) {
   const scroll = node("div", undefined, "scroll");
   scroll.tabIndex = 0;
   const table = node("table");
-  const headers = ["Variant", "Runs", "Warm p50", "Warm p95", "Peak RAM", "Peak GPU", "Bundle", "CLIP cosine", "Composition", "FID (N)"];
+  const headers = ["Variant", "Runs", "Warm p50", "Warm p95", "CV p50", "Peak RAM", "Peak GPU", "Bundle", "CLIP cosine", "Composition", "FID (N)"];
   const head = table.createTHead().insertRow();
   for (const title of headers) {
     const cell = node("th", title);
@@ -170,7 +174,7 @@ function resultTable(group) {
   for (const run of group.rows) {
     const row = tbody.insertRow();
     const values = [
-      run.label, run.samples, seconds(run.latency_p50_ms), seconds(run.latency_p95_ms),
+      run.label, run.samples, seconds(run.latency_p50_ms), seconds(run.latency_p95_ms), seconds(run.cv_p50_ms),
       memory(run.peak_rss_bytes), memory(run.peak_vram_bytes), memory(run.model_bytes),
       score(run.clip_mean), fraction(run.composition_pass), Number.isFinite(run.fid) ? run.fid.toFixed(2) + " (" + run.fid_n + ")" : "—",
     ];

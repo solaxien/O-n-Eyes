@@ -65,6 +65,9 @@ The same generation and scoring commands accept `data/composition.jsonl` for a s
 ## Design
 
 - [System design](docs/DESIGN.md)
+- [Ablation study](docs/ABLATION.md)
+- [Failure case analysis](docs/FAILURES.md)
+- [Evaluation for Team T38](eval_P3_T38.md)
 - [Android benchmark setup](android/README.md)
 - [Initial blueprint](P3_BLUEPRINT.md)
 

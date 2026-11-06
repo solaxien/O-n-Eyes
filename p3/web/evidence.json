@@ -1,0 +1,127 @@
+{
+  "note": "Four-prompt composition pilot. The six 300-image COCO runs and Poco F6 measurements are in progress.",
+  "groups": [
+    {
+      "title": "RTX 4050 Laptop GPU \u00b7 composition pilot",
+      "description": "Fixed prompts and seeds. The CV row reuses the exact decoded images.",
+      "rows": [
+        {
+          "label": "6 \u00b7 Tiny FP16 \u00b7 DPM++ 20 \u00b7 TAESD \u00b7 COCO LoRA",
+          "hardware": "NVIDIA GeForce RTX 4050 Laptop GPU",
+          "backend": "cuda",
+          "os": "Windows-11-10.0.26300-SP0",
+          "torch": "2.10.0+cu128",
+          "load_ms": 1945.79,
+          "first_generation_ms": 2071.05,
+          "cold_peak_rss_bytes": 1890070528,
+          "model_bytes": 906088301,
+          "revision": "aad3e0e8ba61b7cb9f64869dc4e586f8ad9d3665",
+          "requested_steps": 20,
+          "denoiser_calls": 20,
+          "precision": "fp16",
+          "scheduler": "DPMSolverMultistepScheduler",
+          "decoder": "taesd",
+          "adapter": "t38-coco.safetensors",
+          "native_size": 512,
+          "safety_check": false,
+          "id": "tuned",
+          "samples": 4,
+          "failures": 0,
+          "latency_p50_ms": 1266.045,
+          "latency_p95_ms": 1267.4260000000002,
+          "cv_p50_ms": 0.01,
+          "peak_rss_bytes": 1895641088,
+          "peak_vram_bytes": 1092515328,
+          "clip_mean": 0.3580821231007576,
+          "clip_n": 4,
+          "composition_pass": 0.0,
+          "composition_n": 4,
+          "detector_confidence": 0.55
+        },
+        {
+          "label": "Full OpenCV pass",
+          "hardware": "NVIDIA GeForce RTX 4050 Laptop GPU",
+          "backend": "cuda",
+          "os": "Windows-11-10.0.26300-SP0",
+          "torch": "2.10.0+cu128",
+          "load_ms": 1945.79,
+          "first_generation_ms": 2071.05,
+          "cold_peak_rss_bytes": 1890070528,
+          "model_bytes": 906088301,
+          "revision": "aad3e0e8ba61b7cb9f64869dc4e586f8ad9d3665",
+          "requested_steps": 20,
+          "denoiser_calls": 20,
+          "precision": "fp16",
+          "scheduler": "DPMSolverMultistepScheduler",
+          "decoder": "taesd",
+          "adapter": "t38-coco.safetensors",
+          "native_size": 512,
+          "safety_check": false,
+          "id": "tuned-full",
+          "samples": 4,
+          "failures": 0,
+          "latency_p50_ms": null,
+          "latency_p95_ms": null,
+          "cv_p50_ms": 15.702700009569526,
+          "peak_rss_bytes": null,
+          "peak_vram_bytes": null,
+          "clip_mean": 0.3586278110742569,
+          "clip_n": 4,
+          "composition_pass": 0.0,
+          "composition_n": 4,
+          "detector_confidence": 0.55
+        }
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "title": "Position and color",
+      "prompt": "A product photograph of one blue cup to the left of one red apple on a white tabletop. Soft window light.",
+      "seed": 38,
+      "note": "The blue appears in the table covering. A red apple stays on the left of the white cup.",
+      "images": [
+        {
+          "label": "Raw decode",
+          "src": "/evidence/blue-cup-left-raw.webp"
+        },
+        {
+          "label": "After OpenCV",
+          "src": "/evidence/blue-cup-left-cv.webp"
+        }
+      ]
+    },
+    {
+      "title": "Object class and count",
+      "prompt": "A studio photograph of exactly two yellow bananas beside one red apple on a dark green table.",
+      "seed": 841,
+      "note": "Several round yellow fruits appear. The requested pair of bananas is missing.",
+      "images": [
+        {
+          "label": "Raw decode",
+          "src": "/evidence/two-bananas-raw.webp"
+        },
+        {
+          "label": "After OpenCV",
+          "src": "/evidence/two-bananas-cv.webp"
+        }
+      ]
+    },
+    {
+      "title": "Attribute binding and geometry",
+      "prompt": "A blue umbrella above a red bench with a green backpack on the bench, photographed in light rain.",
+      "seed": 72,
+      "note": "The bench is teal, the bag is red, and a second umbrella appears.",
+      "images": [
+        {
+          "label": "Raw decode",
+          "src": "/evidence/bench-rain-raw.webp"
+        },
+        {
+          "label": "After OpenCV",
+          "src": "/evidence/bench-rain-cv.webp"
+        }
+      ]
+    }
+  ]
+}

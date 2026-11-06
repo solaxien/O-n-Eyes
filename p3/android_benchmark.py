@@ -38,7 +38,9 @@ def benchmark(args):
     with args.model.open("rb") as file:
         checksum = hashlib.file_digest(file, "sha256").hexdigest()
     remote = f"/data/local/tmp/p3-t38/{args.variant}"
-    model_path = f"/data/local/tmp/p3-t38/{checksum[:16]}.model"
+    if args.model.suffix not in {".gguf", ".safetensors"}:
+        raise ValueError("Use a GGUF or Safetensors mobile model.")
+    model_path = f"/data/local/tmp/p3-t38/{checksum[:16]}{args.model.suffix}"
     call("shell", "mkdir", "-p", f"{remote}/images")
     if capture("shell", f"stat -c %s {model_path} 2>/dev/null || echo missing") != str(args.model.stat().st_size):
         call("push", args.model, model_path)
