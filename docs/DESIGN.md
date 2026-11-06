@@ -20,7 +20,7 @@ flowchart TD
 
 The hosted path runs Python, PyTorch, Diffusers components, and OpenCV on the inference host. Browser requests carry only prompt and profile settings. The browser polls the job endpoint for queue, encoding, denoising, decoding, and packaging states. A single worker serializes model use and the queue caps outstanding work at two requests. Finished images expire after three minutes and remain in bounded process memory.
 
-The mobile performance track uses the same model families on the physical Poco F6. Its native runtime and weight formats differ from the PyTorch worker. Each speed or memory comparison is made within one device and backend. The public site presents those tracks separately.
+The mobile performance track uses the same model families on the physical Poco F6. A pinned stable-diffusion.cpp runner uses four ARM CPU threads, memory-mapped weights, and TAESD. The runner holds the native shape, sampler, decoder, prompt pair, and seed pair constant while changing denoiser architecture, step count, or weight storage. The public site presents the Android and hosted measurements separately. [Android build and run instructions](../android/README.md)
 
 ## Generation and budget
 
@@ -46,6 +46,6 @@ The pixel checks address localized defects. Missing objects, attribute swaps, an
 
 ## Measurement scope
 
-The host benchmark records the exact model, sampler, resolution, precision, decoder, and adapter for each run. Within a fixed shape, the same FP32 seed-derived noise is cast to each tested precision. The first six comparisons use raw decoded images. CV ablations reuse row 6's pixels. FID uses common generated IDs and the matched COCO references. At 300 images it is a comparison within this study, with the sample size reported next to each value. CLIP cosine and composition checks measure complementary properties.
+The host benchmark records the exact model, sampler, resolution, precision, decoder, and adapter for each run. Within a fixed shape, the same FP32 seed-derived noise is cast to each tested precision. The FP32 reference disables TF32. Each counted denoiser call runs a batch containing the conditional and unconditional branches. The first six comparisons use raw decoded images. CV ablations reuse row 6's pixels. FID uses common generated IDs and the matched COCO references. At 300 images it is a comparison within this study, with the sample size reported next to each value. CLIP cosine and composition checks measure complementary properties. [Fixed validation cohort](../data/coco-val2017.jsonl)
 
 Worker latency covers synchronized encoding, denoising, decoding, safety, and CV. Browser latency additionally covers queue, transport, and image decode. The offline quality study scores raw model outputs before the public worker's safety check. Its latency and bundle size use the components present in those offline runs. PyTorch reports peak allocated GPU bytes and process RSS is sampled independently. Mobile reports the native artifact bytes and physical process memory measured by its runner.

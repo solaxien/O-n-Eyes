@@ -35,15 +35,26 @@ def benchmark(args):
     if capture("shell", "getprop", "ro.product.cpu.abi") != "arm64-v8a":
         raise RuntimeError("Connect an ARM64 Android device.")
 
-    with args.model.open("rb") as file:
-        checksum = hashlib.file_digest(file, "sha256").hexdigest()
     remote = f"/data/local/tmp/p3-t38/{args.variant}"
-    if args.model.suffix not in {".gguf", ".safetensors"}:
-        raise ValueError("Use a GGUF or Safetensors mobile model.")
-    model_path = f"/data/local/tmp/p3-t38/{checksum[:16]}{args.model.suffix}"
     call("shell", "mkdir", "-p", f"{remote}/images")
-    if capture("shell", f"stat -c %s {model_path} 2>/dev/null || echo missing") != str(args.model.stat().st_size):
-        call("push", args.model, model_path)
+
+    def stage_weights(path):
+        if path.suffix not in {".gguf", ".safetensors"}:
+            raise ValueError("Use GGUF or Safetensors mobile weights.")
+        with path.open("rb") as file:
+            checksum = hashlib.file_digest(file, "sha256").hexdigest()
+        target = f"/data/local/tmp/p3-t38/{checksum[:16]}{path.suffix}"
+        size = path.stat().st_size
+        if capture("shell", f"stat -c %s {target} 2>/dev/null || echo missing") != str(size):
+            call("push", path, target)
+        return target, checksum, size
+
+    model_path, checksum, size = stage_weights(args.model)
+    decoder_args = []
+    if args.taesd:
+        decoder_path, decoder_checksum, decoder_size = stage_weights(args.taesd)
+        decoder_args.append(decoder_path)
+        size += decoder_size
     call("push", args.binary, f"{remote}/p3-native")
     call("shell", "chmod", "700", f"{remote}/p3-native")
 
@@ -52,12 +63,16 @@ def benchmark(args):
         "backend": args.backend,
         "hardware": f"Poco F6 ({model})" if product == "peridot" else model,
         "os": f"Android {android}",
-        "model_bytes": args.model.stat().st_size,
+        "model_bytes": size,
         "model_sha256": checksum,
+        "decoder": "taesd" if args.taesd else "vae",
         "steps": args.steps,
         "native_size": args.size,
         "requested_samples": len(rows),
+        "vendor_opencl": args.vendor_opencl,
     }
+    if args.taesd:
+        environment["decoder_sha256"] = decoder_checksum
     index = {sample["id"]: sample for sample in rows}
     with TemporaryDirectory(prefix="android-input-", dir=root) as scratch:
         manifest = Path(scratch) / "prompts.tsv"
@@ -66,9 +81,11 @@ def benchmark(args):
                 prompt = " ".join(sample["prompt"].split())
                 file.write(f"{sample['id']}\t{sample['seed']}\t{prompt}\n")
         call("push", manifest, f"{remote}/prompts.tsv")
+        runtime_environment = ["env", "LD_LIBRARY_PATH=/vendor/lib64"] if args.vendor_opencl else []
         invocation = shlex.join([
+            *runtime_environment,
             f"{remote}/p3-native", model_path, f"{remote}/prompts.tsv",
-            f"{remote}/images", str(args.size), str(args.steps), args.backend,
+            f"{remote}/images", str(args.size), str(args.steps), args.backend, *decoder_args,
         ])
         process = subprocess.Popen(
             [*adb, "shell", invocation], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -76,7 +93,7 @@ def benchmark(args):
         )
         completed = {}
         assert process.stdout is not None
-        with (root / "native.log").open("w", encoding="utf-8") as log:
+        with (root / "native.log").open("w", encoding="utf-8", buffering=1) as log:
             for line in process.stdout:
                 log.write(line)
                 fields = line.strip().split("\t")
@@ -94,22 +111,32 @@ def benchmark(args):
         if completed:
             call("pull", f"{remote}/images", scratch)
             (root / "images").mkdir(exist_ok=True)
+        valid = 0
         for sample in rows:
             key = sample["id"]
             record = {"sample": sample}
             if key in completed:
                 with Image.open(Path(scratch) / "images" / f"{key}.ppm") as opened:
                     image = opened.convert("RGB")
-                started = perf_counter()
-                corrected = enhance(image) if args.cv else None
-                resize(corrected.image if corrected else image, 512).save(root / "images" / f"{key}.png")
                 record.update(
                     generation_ms=completed[key][0], peak_rss_bytes=completed[key][1],
-                    off_device_cv_ms=(perf_counter() - started) * 1000 if corrected else None,
                 )
+                started = perf_counter()
+                checked = enhance(image)
+                record["quality"] = checked.before
+                if not checked.usable:
+                    record["error"] = "The quality check rejected the native decode."
+                else:
+                    output = resize(checked.image if args.cv else image, 512)
+                    record["off_device_cv_ms"] = (perf_counter() - started) * 1000 if args.cv else None
+                    output.save(root / "images" / f"{key}.png")
+                    valid += 1
             else:
                 record["error"] = "No image returned. See the native log and exit code."
             write_json(root / "runs" / f"{key}.json", record)
+    environment["valid_samples"] = valid
+    write_json(root / "environment.json", environment)
+    return environment["exit_code"] or (0 if valid == len(rows) else 3)
 
 
 if __name__ == "__main__":
@@ -117,13 +144,15 @@ if __name__ == "__main__":
     parser.add_argument("--adb", default="adb")
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--model", type=Path, required=True)
+    parser.add_argument("--taesd", type=Path, help="Use an external tiny autoencoder for decoding.")
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--variant", required=True)
     parser.add_argument("--label", required=True)
     parser.add_argument("--steps", type=int, required=True)
     parser.add_argument("--size", type=int, default=512)
-    parser.add_argument("--backend", default="vulkan0")
+    parser.add_argument("--backend", default="cpu")
+    parser.add_argument("--vendor-opencl", action="store_true", help="Load the phone's vendor OpenCL library.")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--cv", action="store_true", help="Apply OpenCV after pulling images. Excluded from phone timings.")
-    benchmark(parser.parse_args())
+    raise SystemExit(benchmark(parser.parse_args()))

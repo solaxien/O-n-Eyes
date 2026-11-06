@@ -1,5 +1,6 @@
 """Offline CLIP alignment, object-level composition checks, and paired COCO FID."""
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +22,17 @@ DETECTOR_THRESHOLD = 0.55
 def _open(path: Path) -> Image.Image:
     with Image.open(path) as image:
         return image.convert("RGB")
+
+
+def _generated_image(root: Path, sample: dict) -> Path | None:
+    key = sample["id"]
+    image = root / "images" / f"{key}.png"
+    record = root / "runs" / f"{key}.json"
+    if image.is_file() and record.is_file():
+        data = json.loads(record.read_text(encoding="utf-8"))
+        if data.get("sample") == sample and "error" not in data:
+            return image
+    return None
 
 
 class Alignment:
@@ -108,11 +120,12 @@ def frechet_distance(first: np.ndarray, second: np.ndarray) -> float:
 @torch.inference_mode()
 def score_runs(manifest: Path, runs: list[Path], device: str, fid: bool):
     rows = read_manifest(manifest)
+    generated = {
+        root: {sample["id"]: path for sample in rows if (path := _generated_image(root, sample)) is not None}
+        for root in runs
+    }
     if fid:
-        rows = [
-            sample for sample in rows
-            if all((root / "images" / f"{sample['id']}.png").is_file() for root in runs)
-        ]
+        rows = [sample for sample in rows if all(sample["id"] in paths for paths in generated.values())]
         if len(rows) < 100 or any("reference" not in sample for sample in rows):
             raise ValueError("FID requires at least 100 common generated images and matching reference paths.")
     torch.hub.set_dir(".cache/torch")
@@ -122,8 +135,8 @@ def score_runs(manifest: Path, runs: list[Path], device: str, fid: bool):
         inception = FeatureExtractorInceptionV3("inception-v3-compat", ["2048"]).to(device).eval()
         references = _inception_features(inception, [manifest.parent / row["reference"] for row in rows], device)
     for root in runs:
-        pairs = [(sample, root / "images" / f"{sample['id']}.png") for sample in rows]
-        pairs = [(sample, path) for sample, path in pairs if path.is_file()]
+        paths = generated[root]
+        pairs = [(sample, paths[sample["id"]]) for sample in rows if sample["id"] in paths]
         if not pairs:
             raise ValueError(f"No generated images in {root}")
         by_sample = {}
@@ -147,7 +160,7 @@ def score_runs(manifest: Path, runs: list[Path], device: str, fid: bool):
             "by_sample": by_sample,
         }
         if fid:
-            generated = _inception_features(inception, [path for _, path in pairs], device)
-            scores.update(fid=frechet_distance(generated, references), fid_n=len(pairs))
+            features = _inception_features(inception, [path for _, path in pairs], device)
+            scores.update(fid=frechet_distance(features, references), fid_n=len(pairs))
         write_json(root / "scores.json", scores)
         print(root.name, {key: value for key, value in scores.items() if key != "by_sample"}, flush=True)

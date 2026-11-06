@@ -6,7 +6,7 @@ P3 Image Lab runs a compact pretrained text-to-image diffusion model in a worker
 
 ## Run the web demo
 
-On a Linux machine with Docker, an NVIDIA driver, and the NVIDIA Container Toolkit, run:
+On a Linux machine with Docker, an NVIDIA driver, and the NVIDIA Container Toolkit, use this command.
 
 ```sh
 docker build -t p3-image-lab . && docker run --rm --gpus all -p 7860:7860 -v p3-weights:/weights p3-image-lab
@@ -14,7 +14,7 @@ docker build -t p3-image-lab . && docker run --rm --gpus all -p 7860:7860 -v p3-
 
 Open [localhost:7860](http://localhost:7860). The first launch downloads the pinned public weights into the volume. The UI shows worker status while the model loads.
 
-For Windows or Linux with Python 3.12–3.14 and a CUDA-compatible NVIDIA driver, create a virtual environment and install the following into it:
+For Windows or Linux with Python 3.12–3.14 and a CUDA-compatible NVIDIA driver, create a virtual environment and use these commands.
 
 ```sh
 python -m pip install torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cu128
@@ -29,11 +29,13 @@ Use one worker so only one model is resident. Set `P3_MODELS` to change the weig
 ```sh
 python -m pip install -r requirements-eval.txt
 python -m p3.fetch_coco --split train --count 1000 --out .runs/data/train
+mkdir -p .runs/data/val
+cp data/coco-val2017.jsonl .runs/data/val/manifest.jsonl
 python -m p3.fetch_coco --split validation --count 300 --out .runs/data/val
 python -m p3.train_lora --manifest .runs/data/train/manifest.jsonl --out p3/weights/t38-coco.safetensors
 ```
 
-The adapter trains for one pass over train2017 using rank-4 attention LoRA. The training command resumes from the checkpoint in `.runs/training`. The app loads the bundled adapter if present. Set `P3_ADAPTER` to load an alternate local adapter.
+The adapter trains for one pass over train2017 using rank-4 attention LoRA. The training command resumes from the checkpoint in `.runs/training`. The app loads the bundled adapter if present. Set `P3_ADAPTER` to load an alternate local adapter. The fixed validation manifest selects one caption per image and adds an evaluation seed. Its captions are from the COCO Consortium under CC BY 4.0, indexed via the Hugging Face dataset mirror. [COCO terms](https://github.com/cocodataset/cocodataset.github.io/blob/master/dataset/termsofuse.htm), [Caption index](https://huggingface.co/datasets/phiyodr/coco2017)
 
 ## Evaluate the six configurations
 

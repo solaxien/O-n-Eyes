@@ -70,8 +70,8 @@ static bool run_image(sd_ctx_t* context, const std::string& id, int64_t seed, co
 }
 
 int main(int argc, char** argv) {
-    if (argc != 7) {
-        std::cerr << "Usage: p3-native MODEL MANIFEST_TSV OUTPUT_DIR SIZE STEPS BACKEND\n";
+    if (argc != 7 && argc != 8) {
+        std::cerr << "Usage: p3-native MODEL MANIFEST_TSV OUTPUT_DIR SIZE STEPS BACKEND [TAESD]\n";
         return 2;
     }
     try {
@@ -89,9 +89,11 @@ int main(int argc, char** argv) {
         sd_ctx_params_init(&options);
         options.model_path = argv[1];
         options.backend = argv[6];
+        if (argc == 8) {
+            options.taesd_path = argv[7];
+        }
         options.n_threads = 4;
         options.enable_mmap = true;
-        options.diffusion_flash_attn = true;
         options.conditioning_cache_size = 0;
         const auto started = Clock::now();
         const std::unique_ptr<sd_ctx_t, decltype(&free_sd_ctx)> context(new_sd_ctx(&options), free_sd_ctx);

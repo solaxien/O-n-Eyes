@@ -9,3 +9,7 @@ These examples use the tuned BK-SDM-Tiny-2M checkpoint, the COCO LoRA, TAESD, an
 | Attribute binding and geometry | A blue umbrella above a red bench with a green backpack, seed 72 | The output includes a blue umbrella, a second red umbrella, a teal bench, and a red bag. Some bench supports break into small fragments. | Local repair and denoising preserve the scene and its attribute errors. [Raw](../p3/web/evidence/bench-rain-raw.webp) · [Enhanced](../p3/web/evidence/bench-rain-cv.webp) |
 
 The CLIP mean captures scene-level alignment. The stricter checks expose where the scene loses individual constraints. The runtime quality gate measures pixel integrity and can retry a near-blank or heavily corrupted decode. Reversed relations, duplicated objects, and color swaps can pass that gate. In this pilot the CV stage made local pixel changes without resolving the semantic failures.
+
+## Poco F6 backend failures
+
+The Adreno Vulkan build stopped in the vendor shader compiler with SIGSEGV. OpenCL with Flash Attention returned eight solid-white frames across four matched configurations. With standard attention and CPU TAESD, the 25-step hybrid run returned two frames with repeating colored patterns and no recognizable scene. The flat frames failed the pixel check. Visual review identified the patterned frames, which had enough luminance variation to pass that check. The ARM CPU control rendered a recognizable apple scene with the same Tiny weights and TAESD, so the valid on-device comparison uses the CPU. [Android setup](../android/README.md)

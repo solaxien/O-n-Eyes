@@ -1,10 +1,25 @@
 # Poco F6 on-device benchmark
 
-The runner executes diffusion on the phone's ARM64 CPU and Adreno GPU through Vulkan. It holds one model context across the warm-up and timed prompts. It records inference wall time, peak process RSS, model load time, and the size of the exact weight file. CV can be applied to the pulled outputs for scoring. Its time is tracked separately on the host.
+The benchmark runs diffusion directly on the ARM CPU of a Poco F6 with Android 16. The runner uses four threads and one model context across the warm-up and timed prompts. It records inference wall time, peak process RSS, model load time, and weight bundle size. The host checks the native pixels before counting a run. Optional OpenCV enhancements on the pulled images are timed separately.
 
 ## Build
 
-Run the repository's [Build Android benchmark](../.github/workflows/android.yml) workflow and download the `p3-native-android-arm64` artifact. For a local build, use CMake, Ninja, an Android NDK, and a host Vulkan shader compiler. The workflow shows the exact build flags and pins stable-diffusion.cpp and its GGML dependency.
+Download `p3-native-android-arm64` from the Build Android benchmark workflow or build it locally with NDK r30, CMake, and Ninja. `ANDROID_NDK_HOME` should point to the NDK directory. [Build workflow](../.github/workflows/android.yml)
+
+```sh
+mkdir -p .tools
+git clone --depth 1 --branch master-1052-f5df5f8 \
+  https://github.com/leejet/stable-diffusion.cpp.git .tools/sd
+git -C .tools/sd submodule update --init --depth 1 ggml
+cmake -S android -B .runs/android-cpu -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DSD_SOURCE="$PWD/.tools/sd" \
+  -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+  -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DANDROID_STL=c++_static \
+  -DSD_VULKAN=OFF -DSD_OPENCL=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+fp16+dotprod
+cmake --build .runs/android-cpu --target p3-native
+```
+
+The Poco F6's vendor Vulkan compiler exited with SIGSEGV during the first denoiser pass. OpenCL with Flash Attention returned flat frames. The trial with standard attention, CPU text encoding, and CPU TAESD returned patterned noise. The study below uses the CPU renderer and records the GPU trials as failures. [Failure analysis](../docs/FAILURES.md)
 
 ## Prepare weights
 
@@ -14,25 +29,28 @@ Fetch the [pinned Diffusers converter](https://github.com/huggingface/diffusers/
 python -m p3.export_mobile --model baseline --converter convert_diffusers_to_original_stable_diffusion.py --out .models/mobile/sd14-f16.safetensors
 python -m p3.export_mobile --model tiny --converter convert_diffusers_to_original_stable_diffusion.py --out .models/mobile/tiny-f16.safetensors
 sd-cli -M convert -m .models/mobile/tiny-f16.safetensors --type q8_0 -o .models/mobile/tiny-q8.gguf
+python -c 'from p3.models import resolve_taesd; resolve_taesd()'
 ```
 
 ## Run
 
-Connect the phone over USB, enable USB debugging, and accept its trust prompt. Select only one USB-connected phone. Run each configuration with the same prompt manifest, resolution, guidance, and backend.
+Connect one phone over USB and authorize USB debugging. These commands run the first two prompts in the same order with fixed seeds, 256 px native resolution, DPM++ 2M, and TAESD. Each configuration runs a separate warm-up before recording the two timings. The baseline and Tiny start with eight steps and FP16 weights, then the study reduces the steps and tests Q8_0 storage.
 
 ```sh
-python -m p3.android_benchmark --binary p3-native --manifest data/composition.jsonl \
-  --out .runs/mobile --variant baseline --label "SD v1.4 FP16 · 50 steps" \
-  --model .models/mobile/sd14-f16.safetensors --steps 50
-python -m p3.android_benchmark --binary p3-native --manifest data/composition.jsonl \
-  --out .runs/mobile --variant tiny25 --label "Tiny FP16 · 25 steps" \
-  --model .models/mobile/tiny-f16.safetensors --steps 25
-python -m p3.android_benchmark --binary p3-native --manifest data/composition.jsonl \
-  --out .runs/mobile --variant tiny8 --label "Tiny FP16 · 8 steps" \
+p3_mobile() {
+  python -m p3.android_benchmark --binary .runs/android-cpu/p3-native \
+    --manifest data/composition.jsonl --out .runs/mobile-cpu \
+    --taesd .models/taesd/diffusion_pytorch_model.safetensors \
+    --size 256 --backend cpu --limit 2 "$@"
+}
+p3_mobile --variant sd14-f16-8 --label "SD v1.4 FP16 · 8 steps" \
+  --model .models/mobile/sd14-f16.safetensors --steps 8
+p3_mobile --variant tiny-f16-8 --label "BK-SDM-Tiny FP16 · 8 steps" \
   --model .models/mobile/tiny-f16.safetensors --steps 8
-python -m p3.android_benchmark --binary p3-native --manifest data/composition.jsonl \
-  --out .runs/mobile --variant tiny8-q8 --label "Tiny Q8_0 · 8 steps" \
-  --model .models/mobile/tiny-q8.gguf --steps 8
+p3_mobile --variant tiny-f16-6 --label "BK-SDM-Tiny FP16 · 6 steps" \
+  --model .models/mobile/tiny-f16.safetensors --steps 6
+p3_mobile --variant tiny-q8-6 --label "BK-SDM-Tiny Q8_0 · 6 steps" \
+  --model .models/mobile/tiny-q8.gguf --steps 6
 ```
 
-Use `--adb` to specify the Platform Tools binary if it is outside PATH. `--limit` supports short smoke runs. Review the recorded native log to verify runtime placement and capture any allocation failures. RSS measures the process high-water mark. Driver-managed GPU allocations can sit outside that figure.
+Use `--adb` if the Platform Tools binary is outside `PATH`. `--limit 1` shortens a smoke run. Peak RSS is the high-water mark for the runner process. The bundle size includes the exported checkpoint and external TAESD weights. Timing covers model inference through decoded pixels. The benchmark then pulls the image, runs the pixel quality check, and resizes it to 512 px on the laptop.

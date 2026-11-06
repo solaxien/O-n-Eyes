@@ -162,10 +162,18 @@ function resultTable(group) {
   section.append(node("h2", group.title), node("p", group.description));
   const scroll = node("div", undefined, "scroll");
   scroll.tabIndex = 0;
+  scroll.setAttribute("aria-label", group.title + " table");
   const table = node("table");
-  const headers = ["Variant", "Runs", "Warm p50", "Warm p95", "CV p50", "Peak RAM", "Peak GPU", "Bundle", "CLIP cosine", "Composition", "FID (N)"];
+  const columns = [
+    ["Variant", "label"], ["Runs", "samples"], ["Denoiser calls", "denoiser_calls"],
+    ["Steps", "steps"], ["Warm p50", "latency_p50_ms", seconds], ["Warm p95", "latency_p95_ms", seconds],
+    ["CV p50", "cv_p50_ms", seconds], ["Peak RAM", "peak_rss_bytes", memory],
+    ["Peak GPU", "peak_vram_bytes", memory], ["Bundle", "model_bytes", memory],
+    ["CLIP cosine", "clip_mean", score], ["Composition", "composition_pass", fraction],
+    ["FID (N)", "fid", (value, run) => value.toFixed(2) + " (" + run.fid_n + ")"],
+  ].filter(([, key]) => group.rows.some((run) => run[key] != null));
   const head = table.createTHead().insertRow();
-  for (const title of headers) {
+  for (const [title] of columns) {
     const cell = node("th", title);
     cell.scope = "col";
     head.append(cell);
@@ -173,12 +181,10 @@ function resultTable(group) {
   const tbody = table.createTBody();
   for (const run of group.rows) {
     const row = tbody.insertRow();
-    const values = [
-      run.label, run.samples, seconds(run.latency_p50_ms), seconds(run.latency_p95_ms), seconds(run.cv_p50_ms),
-      memory(run.peak_rss_bytes), memory(run.peak_vram_bytes), memory(run.model_bytes),
-      score(run.clip_mean), fraction(run.composition_pass), Number.isFinite(run.fid) ? run.fid.toFixed(2) + " (" + run.fid_n + ")" : "—",
-    ];
-    for (const value of values) row.insertCell().textContent = value ?? "—";
+    for (const [, key, format] of columns) {
+      const value = run[key];
+      row.insertCell().textContent = value == null ? "—" : format ? format(value, run) : value;
+    }
   }
   scroll.append(table);
   section.append(scroll);
@@ -210,13 +216,22 @@ async function loadEvidence() {
     const report = await json("/evidence.json");
     const view = byId("evidence");
     view.replaceChildren();
+    if (report.highlights?.length) {
+      const summary = node("dl", undefined, "panel readouts benchmark-summary");
+      for (const { label, value } of report.highlights) {
+        const readout = node("div");
+        readout.append(node("dt", label), node("dd", value));
+        summary.append(readout);
+      }
+      view.append(summary);
+    }
     for (const group of report.groups) view.append(resultTable(group));
     for (const example of report.comparisons) view.append(comparison(example));
     status.textContent = report.note || "";
     status.hidden = !report.note;
     evidenceLoaded = true;
   } catch {
-    status.textContent = "Measured benchmark results will appear here when the benchmark finishes.";
+    status.textContent = "Benchmark results could not load. Refresh the page to try again.";
   }
 }
 
