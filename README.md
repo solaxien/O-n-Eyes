@@ -4,6 +4,8 @@
 
 P3 Image Lab runs a compact pretrained text-to-image diffusion model in a worker we control. The browser presents the raw VAE decode, the result after classical CV, and measured baseline comparisons. The Android benchmark runs the model directly on a Poco F6.
 
+The live demo uses an RTX 4050 Laptop GPU and a temporary HTTPS tunnel. The link is available while the laptop, inference worker, and tunnel are online. [Open P3 Image Lab](https://policies-departmental-consisting-trunk.trycloudflare.com)
+
 ## Run the web demo
 
 On a Linux machine with Docker, an NVIDIA driver, and the NVIDIA Container Toolkit, use this command.
@@ -47,6 +49,8 @@ done
 python -m p3.benchmark score --manifest .runs/data/val/manifest.jsonl \
   --run .runs/coco/{baseline,baseline-half,tiny25,tiny20,taesd,tuned} --fid
 python -m p3.benchmark cv --out .runs/coco --from-variant tuned
+python -m p3.benchmark score --manifest .runs/data/val/manifest.jsonl \
+  --run .runs/coco/tuned-{raw,full,omit-repair,omit-edges,omit-color,omit-gate} --fid
 python -m p3.benchmark report --run .runs/coco/{baseline,baseline-half,tiny25,tiny20,taesd,tuned} \
   --out .runs/coco/summary.json
 ```

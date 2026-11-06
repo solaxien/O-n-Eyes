@@ -13,6 +13,7 @@ let result = null;
 let evidenceLoaded = false;
 
 const seconds = (ms) => Number.isFinite(ms) ? (ms / 1000).toFixed(2) + " s" : "—";
+const milliseconds = (ms) => Number.isFinite(ms) ? ms.toFixed(1) + " ms" : "—";
 const memory = (bytes) => Number.isFinite(bytes) ? (bytes / 2 ** 20).toFixed(0) + " MiB" : "—";
 const fraction = (value) => Number.isFinite(value) ? (value * 100).toFixed(1) + "%" : "—";
 const score = (value) => Number.isFinite(value) ? value.toFixed(4) : "—";
@@ -167,7 +168,7 @@ function resultTable(group) {
   const columns = [
     ["Variant", "label"], ["Runs", "samples"], ["Denoiser calls", "denoiser_calls"],
     ["Steps", "steps"], ["Warm p50", "latency_p50_ms", seconds], ["Warm p95", "latency_p95_ms", seconds],
-    ["CV p50", "cv_p50_ms", seconds], ["Peak RAM", "peak_rss_bytes", memory],
+    ["CV p50", "cv_p50_ms", milliseconds], ["Peak RAM", "peak_rss_bytes", memory],
     ["Peak GPU", "peak_vram_bytes", memory], ["Bundle", "model_bytes", memory],
     ["CLIP cosine", "clip_mean", score], ["Composition", "composition_pass", fraction],
     ["FID (N)", "fid", (value, run) => value.toFixed(2) + " (" + run.fid_n + ")"],

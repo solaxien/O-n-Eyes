@@ -34,7 +34,7 @@ python -c 'from p3.models import resolve_taesd; resolve_taesd()'
 
 ## Run
 
-Connect one phone over USB and authorize USB debugging. These commands run the first two prompts in the same order with fixed seeds, 256 px native resolution, DPM++ 2M, and TAESD. Each configuration runs a separate warm-up before recording the two timings. The baseline and Tiny start with eight steps and FP16 weights, then the study reduces the steps and tests Q8_0 storage.
+Connect one phone over USB and authorize USB debugging. These commands run the first two prompts in the same order with fixed seeds, 256 px native resolution, DPM++ 2M, and TAESD. Each configuration runs a separate warm-up before recording the two timings. The study compares SD v1.4 and Tiny at 25 and eight steps in FP16, then tests six steps and Q8_0 storage on Tiny.
 
 ```sh
 p3_mobile() {
@@ -51,6 +51,10 @@ p3_mobile --variant tiny-f16-6 --label "BK-SDM-Tiny FP16 · 6 steps" \
   --model .models/mobile/tiny-f16.safetensors --steps 6
 p3_mobile --variant tiny-q8-6 --label "BK-SDM-Tiny Q8_0 · 6 steps" \
   --model .models/mobile/tiny-q8.gguf --steps 6
+p3_mobile --variant sd14-f16-25 --label "SD v1.4 FP16 · 25 steps" \
+  --model .models/mobile/sd14-f16.safetensors --steps 25
+p3_mobile --variant tiny-f16-25 --label "BK-SDM-Tiny FP16 · 25 steps" \
+  --model .models/mobile/tiny-f16.safetensors --steps 25
 ```
 
 Use `--adb` if the Platform Tools binary is outside `PATH`. `--limit 1` shortens a smoke run. Peak RSS is the high-water mark for the runner process. The bundle size includes the exported checkpoint and external TAESD weights. Timing covers model inference through decoded pixels. The benchmark then pulls the image, runs the pixel quality check, and resizes it to 512 px on the laptop.

@@ -10,7 +10,7 @@ from PIL import Image
 import torch
 from diffusers import AutoencoderTiny, DPMSolverMultistepScheduler, StableDiffusionPipeline
 
-from p3.models import CHECKPOINTS, resolve_model, resolve_taesd
+from p3.models import CHECKPOINTS, load_fp32_components, resolve_model, resolve_taesd
 from p3.vision import enhance, resize
 
 
@@ -103,17 +103,19 @@ class Generator:
         if device == "cpu":
             torch.set_num_threads(min(torch.get_num_threads(), 8))
         model_dir, self.model_bytes = resolve_model(checkpoint, self.weight_precision, include_safety=check_safety)
-        safety_options = {} if check_safety else {
+        load_options = {} if check_safety else {
             "safety_checker": None, "feature_extractor": None, "requires_safety_checker": False,
         }
         started = perf_counter()
+        if os.name == "nt" and device == "cuda" and precision == self.weight_precision == "fp32" and not check_safety:
+            load_options.update(load_fp32_components(model_dir))
         self.pipe = StableDiffusionPipeline.from_pretrained(
             model_dir,
             local_files_only=True,
             use_safetensors=True,
             variant="fp16" if self.weight_precision == "fp16" else None,
             torch_dtype=self.dtype,
-            **safety_options,
+            **load_options,
         )
         if decoder == "taesd":
             taesd_dir, taesd_bytes = resolve_taesd()
