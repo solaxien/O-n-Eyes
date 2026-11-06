@@ -12,7 +12,7 @@ from p3.models import CHECKPOINTS, COMPONENTS, resolve_model
 
 
 def export(key: str, precision: str, converter: Path, output: Path):
-    source, _ = resolve_model(key, precision)
+    source, _ = resolve_model(key, precision, include_safety=False)
     output.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix="sd-export-", dir=output.parent) as scratch:
         staged = Path(scratch)

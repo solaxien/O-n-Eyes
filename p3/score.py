@@ -1,8 +1,6 @@
 """Offline CLIP alignment, object-level composition checks, and paired COCO FID."""
 
 from pathlib import Path
-import shutil
-from tempfile import TemporaryDirectory
 
 import numpy as np
 from PIL import Image
@@ -87,28 +85,24 @@ class Alignment:
         return {"pass": all(checks.values()), "checks": checks}
 
 
-def _fid(manifest: Path, root: Path, pairs: list[tuple[dict, Path]], device: str) -> dict:
-    from torch_fidelity import calculate_metrics
+def _inception_features(extractor, paths: list[Path], device: str) -> np.ndarray:
+    features = []
+    for index in range(0, len(paths), 16):
+        batch = np.stack([np.asarray(_open(path)) for path in paths[index:index + 16]])
+        images = torch.from_numpy(batch).permute(0, 3, 1, 2).contiguous().to(device)
+        features.append(extractor(images)[0].cpu().numpy())
+    return np.concatenate(features).astype(np.float64)
 
-    if len(pairs) < 100 or any("reference" not in sample for sample, _ in pairs):
-        raise ValueError("FID requires at least 100 matched images and reference paths.")
-    with TemporaryDirectory(prefix="fid-", dir=root) as temporary:
-        scratch = Path(temporary)
-        generated, reference = scratch / "generated", scratch / "reference"
-        generated.mkdir()
-        reference.mkdir()
-        for sample, image in pairs:
-            name = f"{sample['id']}.png"
-            shutil.copyfile(image, generated / name)
-            shutil.copyfile(manifest.parent / sample["reference"], reference / name)
-        values = calculate_metrics(
-            input1=str(generated), input2=str(reference), cuda=device == "cuda", batch_size=16,
-            fid=True, rng_seed=38, verbose=False,
-        )
-    return {
-        "fid": float(values["frechet_inception_distance"]),
-        "fid_n": len(pairs),
-    }
+
+def frechet_distance(first: np.ndarray, second: np.ndarray) -> float:
+    first_mean, second_mean = first.mean(axis=0), second.mean(axis=0)
+    left = (first - first_mean) / np.sqrt(len(first) - 1)
+    right = (second - second_mean) / np.sqrt(len(second) - 1)
+    # The cross term equals the sum of singular values of the product of the
+    # centered sample matrices. This also works for rank-deficient covariances.
+    cross = np.linalg.svd(left @ right.T, compute_uv=False).sum()
+    score = np.square(first_mean - second_mean).sum() + np.square(left).sum() + np.square(right).sum() - 2 * cross
+    return float(max(0, score))
 
 
 @torch.inference_mode()
@@ -119,8 +113,14 @@ def score_runs(manifest: Path, runs: list[Path], device: str, fid: bool):
             sample for sample in rows
             if all((root / "images" / f"{sample['id']}.png").is_file() for root in runs)
         ]
-    alignment = Alignment(device, any(row.get("objects") for row in rows))
+        if len(rows) < 100 or any("reference" not in sample for sample in rows):
+            raise ValueError("FID requires at least 100 common generated images and matching reference paths.")
     torch.hub.set_dir(".cache/torch")
+    alignment = Alignment(device, any(row.get("objects") for row in rows))
+    if fid:
+        from torch_fidelity.feature_extractor_inceptionv3 import FeatureExtractorInceptionV3
+        inception = FeatureExtractorInceptionV3("inception-v3-compat", ["2048"]).to(device).eval()
+        references = _inception_features(inception, [manifest.parent / row["reference"] for row in rows], device)
     for root in runs:
         pairs = [(sample, root / "images" / f"{sample['id']}.png") for sample in rows]
         pairs = [(sample, path) for sample, path in pairs if path.is_file()]
@@ -147,6 +147,7 @@ def score_runs(manifest: Path, runs: list[Path], device: str, fid: bool):
             "by_sample": by_sample,
         }
         if fid:
-            scores.update(_fid(manifest, root, pairs, device))
+            generated = _inception_features(inception, [path for _, path in pairs], device)
+            scores.update(fid=frechet_distance(generated, references), fid_n=len(pairs))
         write_json(root / "scores.json", scores)
         print(root.name, {key: value for key, value in scores.items() if key != "by_sample"}, flush=True)

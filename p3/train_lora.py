@@ -85,10 +85,10 @@ def train(manifest: Path, output: Path, work: Path, resolution: int, rank: int):
     }
     torch.manual_seed(SEED)
     started = perf_counter()
-    model_dir, _ = resolve_model("tiny", "fp16")
+    model_dir, _ = resolve_model("tiny", "fp16", include_safety=False)
     pipe = StableDiffusionPipeline.from_pretrained(
         model_dir, local_files_only=True, use_safetensors=True, variant="fp16",
-        torch_dtype=DTYPE, safety_checker=None, requires_safety_checker=False,
+        torch_dtype=DTYPE, safety_checker=None, feature_extractor=None, requires_safety_checker=False,
     )
     noise_scheduler = DDPMScheduler.from_config(pipe.scheduler.config)
     cache = work / "encodings.pt"

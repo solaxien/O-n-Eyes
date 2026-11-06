@@ -42,20 +42,23 @@ def resolve_taesd() -> tuple[Path, int]:
     return destination, sum((destination / path).stat().st_size for path in files)
 
 
-def resolve_model(key: str, precision: str) -> tuple[Path, int]:
+def resolve_model(key: str, precision: str, *, include_safety: bool = True) -> tuple[Path, int]:
     checkpoint = CHECKPOINTS[key]
     destination = models_root() / key / precision
     suffix = ".fp16.safetensors" if precision == "fp16" else ".safetensors"
     files = [
         "model_index.json",
         "scheduler/scheduler_config.json",
-        "feature_extractor/preprocessor_config.json",
         "tokenizer/merges.txt",
         "tokenizer/vocab.json",
         "tokenizer/tokenizer_config.json",
         "tokenizer/special_tokens_map.json",
     ]
+    if include_safety:
+        files.append("feature_extractor/preprocessor_config.json")
     for component, filename in COMPONENTS.items():
+        if component == "safety_checker" and not include_safety:
+            continue
         files.extend((f"{component}/config.json", f"{component}/{filename}{suffix}"))
 
     if not all((destination / path).is_file() for path in files):
