@@ -16,7 +16,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('--kind', choices=['raw', 'enhanced'], default='enhanced')
+    parser.add_argument('--kind', choices=['raw', 'enhanced', 'omit-repair', 'omit-edges', 'omit-color', 'omit-gate'], default='enhanced')
     args = parser.parse_args()
     experiment = json.loads((args.source/'experiment.json').read_text())
     complete = json.loads((args.source/'completion.json').read_text())

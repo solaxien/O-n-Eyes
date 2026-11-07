@@ -1,6 +1,8 @@
 # P3 System Design
 
-## Runtime layout
+The current public app uses visitor-device WebGPU/WASM inference. Its complete architecture, measured resource strategy and offline acceptance are in [Browser on-device design](BROWSER_ON_DEVICE.md). The host/native design below is retained for reproducing historical comparisons.
+
+## Historical host runtime layout
 
 ```mermaid
 flowchart TD

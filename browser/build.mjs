@@ -1,18 +1,61 @@
-import {mkdir,copyFile,readdir,writeFile,readFile} from 'node:fs/promises';
-import {createHash} from 'node:crypto';
-import {fileURLToPath} from 'node:url';
-import {join,dirname} from 'node:path';
-const root=dirname(fileURLToPath(import.meta.url));
-const out=join(root,'dist');
-await mkdir(join(out,'vendor'),{recursive:true});
-for(const file of await readdir(join(root,'src'))) await copyFile(join(root,'src',file),join(out,file));
-const runtime=['ort.webgpu.min.mjs','ort-wasm-simd-threaded.asyncify.mjs','ort-wasm-simd-threaded.asyncify.wasm'];
-for(const file of runtime) await copyFile(join(root,'node_modules/onnxruntime-web/dist',file),join(out,'vendor',file));
-const manifest=await readFile(process.env.P3_BROWSER_MODELS?join(process.env.P3_BROWSER_MODELS,'manifest.json'):join(root,'model-manifest.json'));
-await writeFile(join(out,'model-index.json'),JSON.stringify({manifest_sha256:createHash('sha256').update(manifest).digest('hex'),manifest_bytes:manifest.length}));
-const assets=['/','/index.html','/model-index.json',...(await readdir(join(root,'src'))).filter(x=>x!=='sw.js').map(x=>'/'+x),...runtime.map(x=>'/vendor/'+x)];
-await writeFile(join(out,'shell.json'),JSON.stringify([...new Set(assets)]));
-const hash=createHash('sha256');for(const asset of assets.filter(x=>x!=='/'))hash.update(await readFile(join(out,asset.slice(1))));
-const version=hash.digest('hex').slice(0,16);
-await writeFile(join(out,'sw.js'),(await readFile(join(root,'src/sw.js'),'utf8')).replace('p3-device-shell-v1','p3-device-shell-'+version));
-console.log('Built static browser application and pinned ONNX Runtime Web 1.31.1.');
+import {
+  mkdir,
+  copyFile,
+  readdir,
+  writeFile,
+  readFile,
+} from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { join, dirname } from "node:path";
+const root = dirname(fileURLToPath(import.meta.url));
+const out = join(root, "dist");
+await mkdir(join(out, "vendor"), { recursive: true });
+for (const file of await readdir(join(root, "src")))
+  await copyFile(join(root, "src", file), join(out, file));
+const runtime = [
+  "ort.webgpu.min.mjs",
+  "ort-wasm-simd-threaded.asyncify.mjs",
+  "ort-wasm-simd-threaded.asyncify.wasm",
+];
+for (const file of runtime)
+  await copyFile(
+    join(root, "node_modules/onnxruntime-web/dist", file),
+    join(out, "vendor", file),
+  );
+const manifest = await readFile(
+  process.env.P3_BROWSER_MODELS
+    ? join(process.env.P3_BROWSER_MODELS, "manifest.json")
+    : join(root, "model-manifest.json"),
+);
+await writeFile(
+  join(out, "model-index.json"),
+  JSON.stringify({
+    manifest_sha256: createHash("sha256").update(manifest).digest("hex"),
+    manifest_bytes: manifest.length,
+  }),
+);
+const assets = [
+  "/",
+  "/index.html",
+  "/model-index.json",
+  ...(await readdir(join(root, "src")))
+    .filter((x) => x !== "sw.js")
+    .map((x) => "/" + x),
+  ...runtime.map((x) => "/vendor/" + x),
+];
+await writeFile(join(out, "shell.json"), JSON.stringify([...new Set(assets)]));
+const hash = createHash("sha256");
+for (const asset of assets.filter((x) => x !== "/"))
+  hash.update(await readFile(join(out, asset.slice(1))));
+const version = hash.digest("hex").slice(0, 16);
+await writeFile(
+  join(out, "sw.js"),
+  (await readFile(join(root, "src/sw.js"), "utf8")).replace(
+    "p3-device-shell-v1",
+    "p3-device-shell-" + version,
+  ),
+);
+console.log(
+  "Built static browser application and pinned ONNX Runtime Web 1.31.1.",
+);
