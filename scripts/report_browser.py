@@ -56,6 +56,16 @@ if (root/'published-offline-v1/completion.json').exists():
     report['published_offline'] = experiment('published-offline-v1')
     report['published_offline']['isolation'] = read(root/'published-offline-v1/offline-state.json')
     report['published_offline']['network_events'] = [json.loads(line) for line in (root/'published-offline-v1/network.jsonl').read_text().splitlines()]
+if (root/'published-visible-v1/completion.json').exists():
+    report['published_visible'] = experiment('published-visible-v1')
+    report['published_visible']['isolation'] = read(root/'published-visible-v1/offline-state.json')
+    report['published_visible']['restored'] = read(root/'published-visible-v1/network-restored.json')
+    report['published_visible']['network_events'] = [json.loads(line) for line in (root/'published-visible-v1/network.jsonl').read_text().splitlines()]
+report['public_assets'] = read(root/'published-assets.json')
+report['release_integrity'] = read(root/'release-integrity.json')
+report['cache_transfer'] = read(root/'published-cache-transfer.json')
+if (root/'cleanup.json').exists():
+    report['cleanup'] = read(root/'cleanup.json')
 write_json(destination/'evidence.json', report)
 
 # Contact sheets are evaluation figures. Original PNGs remain unmodified.
