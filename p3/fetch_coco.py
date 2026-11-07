@@ -11,6 +11,7 @@ from time import sleep
 
 import httpx
 from PIL import Image, ImageOps
+from p3.provenance import save_image, exclusive_run
 
 
 ROWS_URL = "https://datasets-server.huggingface.co/rows"
@@ -31,7 +32,25 @@ def fetch(client: httpx.Client, url: str, params: dict | None = None) -> httpx.R
     raise RuntimeError("Unreachable")
 
 
+def valid_reference(path: Path) -> bool:
+    try:
+        with Image.open(path) as image:
+            if image.format != "PNG" or image.mode != "RGB" or image.size != (512, 512):
+                return False
+            image.verify()
+        with Image.open(path) as image:
+            image.load()
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def prepare(split: str, count: int, destination: Path, workers: int):
+    with exclusive_run(destination):
+        _prepare(split, count, destination, workers)
+
+
+def _prepare(split: str, count: int, destination: Path, workers: int):
     split_dir = "train2017" if split == "train" else "val2017"
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "reference").mkdir(exist_ok=True)
@@ -70,14 +89,12 @@ def prepare(split: str, count: int, destination: Path, workers: int):
             if not re.fullmatch(fr"{split_dir}/\d{{12}}\.jpg", source_file):
                 raise ValueError("Invalid COCO image path")
             target = destination / "reference" / f"{row['id']}.png"
-            if target.is_file():
+            if valid_reference(target):
                 return
             content = fetch(client, f"{IMAGE_BUCKET}/{source_file}").content
-            temporary = target.with_suffix(".tmp")
             with Image.open(BytesIO(content)) as photo:
                 image = ImageOps.fit(photo.convert("RGB"), (512, 512), Image.Resampling.LANCZOS)
-                image.save(temporary, format="PNG")
-            temporary.replace(target)
+                save_image(target, image)
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
             for index, _ in enumerate(pool.map(download, records), start=1):

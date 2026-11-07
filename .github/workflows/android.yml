@@ -9,6 +9,8 @@ permissions:
 jobs:
   arm64:
     runs-on: ubuntu-24.04
+    env:
+      P3_NDK_VERSION: 30.0.16248370
     steps:
       - uses: actions/checkout@v4
       - name: Fetch the pinned runtime
@@ -19,17 +21,40 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build
+      - name: Install and verify the tested NDK
+        run: |
+          sdkmanager "ndk;$P3_NDK_VERSION"
+          ndk="$ANDROID_HOME/ndk/$P3_NDK_VERSION"
+          grep -Fx "Pkg.Revision = $P3_NDK_VERSION" "$ndk/source.properties"
+          echo "P3_NDK_HOME=$ndk" >> "$GITHUB_ENV"
       - name: Compile the ARM64 CPU runner
         run: |
-          ndk="${ANDROID_NDK_LATEST_HOME:?Android NDK is required}"
+          ndk="${P3_NDK_HOME:?The pinned NDK is required}"
           cmake -S android -B .runs/android-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release -DSD_SOURCE="$PWD/.tools/sd" \
             -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DANDROID_STL=c++_static \
             -DSD_VULKAN=OFF -DSD_OPENCL=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+fp16+dotprod
           cmake --build .runs/android-build --target p3-native --parallel 3
+      - name: Record build provenance
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          root = pathlib.Path('.runs/android-build')
+          binary = root / 'p3-native'
+          ndk = pathlib.Path(os.environ['P3_NDK_HOME'])
+          sha = lambda p: hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+          revision = lambda p: subprocess.check_output(['git', '-C', p, 'rev-parse', 'HEAD'], text=True).strip()
+          data = {'ndk': os.environ['P3_NDK_VERSION'], 'ndk_properties': (ndk / 'source.properties').read_text(),
+                  'runtime_commit': revision('.tools/sd'), 'ggml_commit': revision('.tools/sd/ggml'),
+                  'repository_commit': os.environ['GITHUB_SHA'], 'runner_source_sha256': sha('android/benchmark.cpp'),
+                  'binary_sha256': sha(binary), 'cmake_cache_sha256': sha(root / 'CMakeCache.txt')}
+          (root / 'build-provenance.json').write_text(json.dumps(data, indent=2) + '\n')
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: p3-native-android-arm64
-          path: .runs/android-build/p3-native
+          path: |
+            .runs/android-build/p3-native
+            .runs/android-build/build-provenance.json
           if-no-files-found: error

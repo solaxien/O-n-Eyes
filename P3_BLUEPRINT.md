@@ -2,6 +2,8 @@
 
 *Initial design for review. See the [current implementation design](docs/DESIGN.md) for the revised COCO and TAESD study.*
 
+**Status correction after implementation review.** The provisional iPhone/Core ML, Gradio, 1,000-image evaluation, GenEval subset, and 30 warm phone samples below were planning choices, not completed deliverables. The implemented target is Poco F6/ARM CPU, the web UI is FastAPI, and the original COCO evaluation has 300 images. The review adds strict experiment provenance, adapted export verification, and separate diagnostic measurements. See [reproduction and scope](docs/REPRODUCIBILITY.md) and [mobile feasibility](docs/MOBILE_FEASIBILITY.md). The hosted ten-second target does not describe native phone generation.
+
 Start with **BK-SDM-Tiny-2M at 512 × 512**, an eight-step sampler, and a classical OpenCV pass. Use the same checkpoint in a self-hosted GPU demo and a native phone benchmark. The demo target is **about 10 seconds from submit to visible image**. The phone benchmark measures the cost of running generation on the device itself.
 
 ## Model and runtimes

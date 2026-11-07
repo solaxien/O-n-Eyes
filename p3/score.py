@@ -1,6 +1,7 @@
 """Offline CLIP alignment, object-level composition checks, and paired COCO FID."""
 
 import json
+from contextlib import ExitStack
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,8 @@ import torch
 from transformers import AutoImageProcessor, CLIPModel, CLIPProcessor, YolosForObjectDetection
 
 from p3.benchmark import read_manifest, write_json
+from p3.provenance import (exclusive_run, file_hash, inputs_snapshot, invalidate_scores, load_protocol,
+                           runtime_identity, session_id, source_hashes, valid_record)
 
 
 CLIP = "openai/clip-vit-base-patch32"
@@ -24,14 +27,12 @@ def _open(path: Path) -> Image.Image:
         return image.convert("RGB")
 
 
-def _generated_image(root: Path, sample: dict) -> Path | None:
+def _generated_image(root: Path, sample: dict, *, allow_legacy=False) -> Path | None:
     key = sample["id"]
     image = root / "images" / f"{key}.png"
-    record = root / "runs" / f"{key}.json"
-    if image.is_file() and record.is_file():
-        data = json.loads(record.read_text(encoding="utf-8"))
-        if data.get("sample") == sample and "error" not in data:
-            return image
+    protocol = load_protocol(root)
+    if valid_record(root, sample, protocol["fingerprint"] if protocol else None, allow_legacy=allow_legacy):
+        return image
     return None
 
 
@@ -63,17 +64,21 @@ class Alignment:
             self.detector(**inputs), threshold=DETECTOR_THRESHOLD, target_sizes=torch.tensor([[height, width]])
         )[0]
         detections = {}
-        for label, box in zip(predictions["labels"].tolist(), predictions["boxes"].tolist()):
+        detected = []
+        for label, box, confidence in zip(predictions["labels"].tolist(), predictions["boxes"].tolist(), predictions["scores"].tolist()):
             name = self.detector.config.id2label[label]
             detections.setdefault(name, []).append(box)
+            detected.append({"label": name, "box": box, "confidence": confidence})
 
         checks = {}
         groups = {}
+        diagnostics = {}
         for target in sample["objects"]:
             label, key = target["label"], target["id"]
             boxes = detections.get(label, [])
             checks[f"{key} count"] = len(boxes) == target["count"]
             groups[key] = boxes if checks[f"{key} count"] else []
+            diagnostics[key] = {"expected_count": target["count"], "detected_count": len(boxes)}
             if "color" in target:
                 good = False
                 if groups[key]:
@@ -81,6 +86,8 @@ class Alignment:
                     prompts = [f"a photo of a {color} {label}" for color in COLORS]
                     predicted_colors = [COLORS[index] for index in self.cosine(crops, prompts).argmax(dim=1).tolist()]
                     good = all(color == target["color"] for color in predicted_colors)
+                    diagnostics[key]["crop_colors"] = predicted_colors
+                diagnostics[key]["color_evaluable"] = bool(groups[key])
                 checks[f"{key} color"] = good
 
         for subject, relation, other in sample.get("relations", []):
@@ -94,7 +101,8 @@ class Alignment:
             if relation in {"right", "below"}:
                 first, second = second, first
             checks[f"{subject} {relation} {other}"] = bool(first and second and max(first) + margin < min(second))
-        return {"pass": all(checks.values()), "checks": checks}
+        return {"pass": all(checks.values()), "checks": checks,
+                "detections": detected, "diagnostics": diagnostics}
 
 
 def _inception_features(extractor, paths: list[Path], device: str) -> np.ndarray:
@@ -118,14 +126,31 @@ def frechet_distance(first: np.ndarray, second: np.ndarray) -> float:
 
 
 @torch.inference_mode()
-def score_runs(manifest: Path, runs: list[Path], device: str, fid: bool):
-    rows = read_manifest(manifest)
+def score_runs(manifest: Path, runs: list[Path], device: str, fid: bool, *, allow_legacy=False):
+    if len(set(path.resolve() for path in runs)) != len(runs):
+        raise ValueError("Specify each run only once")
+    with ExitStack() as stack:
+        for root in sorted(runs):
+            stack.enter_context(exclusive_run(root))
+        _score_runs(manifest, runs, device, fid, allow_legacy=allow_legacy)
+
+
+def paired_samples(rows: list[dict], generated: dict) -> list[dict]:
+    return [row for row in rows if all(row["id"] in paths for paths in generated.values())]
+
+
+def _score_runs(manifest: Path, runs: list[Path], device: str, fid: bool, *, allow_legacy=False):
+    all_rows = read_manifest(manifest)
+    if not allow_legacy and any(load_protocol(root) is None for root in runs):
+        raise ValueError("Legacy experiment requires explicit --allow-legacy. Original provenance cannot be reconstructed.")
     generated = {
-        root: {sample["id"]: path for sample in rows if (path := _generated_image(root, sample)) is not None}
+        root: {sample["id"]: path for sample in all_rows if (path := _generated_image(root, sample, allow_legacy=allow_legacy)) is not None}
         for root in runs
     }
+    rows = paired_samples(all_rows, generated)
+    if not rows:
+        raise ValueError("No common valid images to score")
     if fid:
-        rows = [sample for sample in rows if all(sample["id"] in paths for paths in generated.values())]
         if len(rows) < 100 or any("reference" not in sample for sample in rows):
             raise ValueError("FID requires at least 100 common generated images and matching reference paths.")
     torch.hub.set_dir(".cache/torch")
@@ -134,6 +159,8 @@ def score_runs(manifest: Path, runs: list[Path], device: str, fid: bool):
         from torch_fidelity.feature_extractor_inceptionv3 import FeatureExtractorInceptionV3
         inception = FeatureExtractorInceptionV3("inception-v3-compat", ["2048"]).to(device).eval()
         references = _inception_features(inception, [manifest.parent / row["reference"] for row in rows], device)
+    reference_proof = [{"path": str((manifest.parent / row["reference"]).resolve()),
+                        "sha256": file_hash(manifest.parent / row["reference"])} for row in rows] if fid else []
     for root in runs:
         paths = generated[root]
         pairs = [(sample, paths[sample["id"]]) for sample in rows if sample["id"] in paths]
@@ -156,11 +183,30 @@ def score_runs(manifest: Path, runs: list[Path], device: str, fid: bool):
             "clip_n": len(by_sample),
             "composition_pass": passed / composition_n if composition_n else None,
             "composition_n": composition_n,
+            "requested_n": len(all_rows),
+            "available_n": len(paths),
+            "paired_n": len(pairs),
+            "missing_or_invalid_n": len(all_rows) - len(paths),
             "detector_confidence": DETECTOR_THRESHOLD if composition_n else None,
             "by_sample": by_sample,
+            "clauses": {category: {
+                "passed": sum(value for result in by_sample.values()
+                              for key, value in result.get("composition", {}).get("checks", {}).items()
+                              if (key.endswith(" " + category) if category != "position" else not key.endswith((" count", " color")))),
+                "total": sum(1 for result in by_sample.values()
+                             for key in result.get("composition", {}).get("checks", {})
+                             if (key.endswith(" " + category) if category != "position" else not key.endswith((" count", " color"))))
+            } for category in ("count", "color", "position")},
+            "provenance": {"manifest": all_rows, "inputs": inputs_snapshot(root, all_rows, allow_legacy=allow_legacy),
+                           "legacy": load_protocol(root) is None, "references": reference_proof,
+                           "scorer_code": source_hashes("score.py", "provenance.py"),
+                           "runtime": runtime_identity(device), "clip_revision": CLIP_REVISION,
+                           "detector_revision": YOLOS_REVISION, "threshold": DETECTOR_THRESHOLD,
+                           "relation_margin": 0.05, "paired_ids": [row["id"] for row in rows]},
         }
         if fid:
             features = _inception_features(inception, [path for _, path in pairs], device)
             scores.update(fid=frechet_distance(features, references), fid_n=len(pairs))
+        invalidate_scores(root, session_id())
         write_json(root / "scores.json", scores)
-        print(root.name, {key: value for key, value in scores.items() if key != "by_sample"}, flush=True)
+        print(root.name, {key: value for key, value in scores.items() if key not in {"by_sample", "provenance"}}, flush=True)

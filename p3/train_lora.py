@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import math
+from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
@@ -17,7 +18,9 @@ from peft import LoraConfig, get_peft_model_state_dict, set_peft_model_state_dic
 from torchvision.transforms.functional import pil_to_tensor
 
 from p3.benchmark import read_manifest, write_json
-from p3.models import CHECKPOINTS, resolve_model
+from p3.models import CHECKPOINTS, model_files, resolve_model
+from p3.provenance import (atomic_bytes, digest, establish_protocol, exclusive_run, file_hash,
+                           read_json, runtime_identity, session_id, source_hashes)
 
 
 DEVICE = "cuda"
@@ -28,9 +31,48 @@ SEED = 38
 
 
 def save_state(path: Path, data: dict):
-    temporary = path.with_suffix(".tmp")
-    torch.save(data, temporary)
-    temporary.replace(path)
+    buffer = BytesIO()
+    torch.save(data, buffer)
+    atomic_bytes(path, buffer.getvalue())
+
+
+def training_protocol(manifest, samples, model_dir, resolution, rank, runtime=None):
+    images = {}
+    for row in samples:
+        path = manifest.parent / row["reference"]
+        with Image.open(path) as image:
+            image.verify()
+        with Image.open(path) as image:
+            image.load()
+        images[row["id"]] = file_hash(path)
+    return {
+        "schema": 2, "kind": "lora-training", "checkpoint": CHECKPOINTS["tiny"].revision,
+        "manifest": samples, "train_manifest_sha256": file_hash(manifest), "image_sha256": images,
+        "source_files": {name: file_hash(model_dir / name) for name in model_files("fp16", include_safety=False)},
+        "runtime": runtime if runtime is not None else runtime_identity(DEVICE),
+        "code": source_hashes("train_lora.py", "models.py", "provenance.py"),
+        "resolution": resolution, "rank": rank, "seed": SEED, "learning_rate": LEARNING_RATE,
+        "accumulation": ACCUMULATE, "training_pairs": len(samples), "dtype": "fp16",
+        "encoding": "RGB/Lanczos center fit; VAE posterior sample; CLIP max_length=77",
+    }
+
+
+def validate_encodings(data: dict, count: int, resolution: int):
+    shapes = {"latents": (count, 4, resolution // 8, resolution // 8),
+              "embeddings": (count, 77, 768), "empty": (1, 77, 768)}
+    if set(data) != set(shapes):
+        raise ValueError("Encoding cache has unexpected fields")
+    for key, shape in shapes.items():
+        value = data[key]
+        if not isinstance(value, torch.Tensor) or tuple(value.shape) != shape or value.dtype != DTYPE or not torch.isfinite(value).all():
+            raise ValueError(f"Invalid cached {key} shape, dtype, or values")
+
+
+def load_checked_state(path, metadata_path, fingerprint):
+    proof = read_json(metadata_path)
+    if proof.get("protocol_hash") != fingerprint or proof.get("sha256") != file_hash(path):
+        raise ValueError("Training cache/checkpoint integrity mismatch. Preserve it and use a new --work directory.")
+    return torch.load(path, map_location="cpu", weights_only=True)
 
 
 @torch.no_grad()
@@ -66,6 +108,15 @@ def encode_training_set(pipe, manifest: Path, samples: list[dict], resolution: i
 
 
 def train(manifest: Path, output: Path, work: Path, resolution: int, rank: int):
+    if output.exists():
+        raise FileExistsError("Choose a new --out filename; existing trained adapters are preserved.")
+    with exclusive_run(output.parent / ".training-lock"), exclusive_run(work):
+        if output.exists():
+            raise FileExistsError("An adapter already exists at --out")
+        _train(manifest, output, work, resolution, rank)
+
+
+def _train(manifest: Path, output: Path, work: Path, resolution: int, rank: int):
     if not torch.cuda.is_available():
         raise RuntimeError("COCO LoRA training requires a CUDA PyTorch build and a CUDA GPU.")
     samples = read_manifest(manifest)
@@ -73,19 +124,11 @@ def train(manifest: Path, output: Path, work: Path, resolution: int, rank: int):
         raise ValueError("Provide a COCO train2017 manifest with image paths. Validation rows are reserved for evaluation.")
     work.mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
-    settings = {
-        "checkpoint": CHECKPOINTS["tiny"].revision,
-        "train_manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
-        "resolution": resolution,
-        "rank": rank,
-        "seed": SEED,
-        "learning_rate": LEARNING_RATE,
-        "accumulation": ACCUMULATE,
-        "training_pairs": len(samples),
-    }
+    model_dir, _ = resolve_model("tiny", "fp16", include_safety=False)
+    settings = training_protocol(manifest, samples, model_dir, resolution, rank)
+    fingerprint = establish_protocol(work, settings)
     torch.manual_seed(SEED)
     started = perf_counter()
-    model_dir, _ = resolve_model("tiny", "fp16", include_safety=False)
     pipe = StableDiffusionPipeline.from_pretrained(
         model_dir, local_files_only=True, use_safetensors=True, variant="fp16",
         torch_dtype=DTYPE, safety_checker=None, feature_extractor=None, requires_safety_checker=False,
@@ -93,13 +136,13 @@ def train(manifest: Path, output: Path, work: Path, resolution: int, rank: int):
     noise_scheduler = DDPMScheduler.from_config(pipe.scheduler.config)
     cache = work / "encodings.pt"
     if cache.exists():
-        stored = torch.load(cache, map_location="cpu", weights_only=True)
-        if stored["settings"] != settings:
-            raise ValueError("Training input or settings changed. Start with a new --work directory.")
-        encoded = stored["data"]
+        encoded = load_checked_state(cache, work / "encodings.json", fingerprint)["data"]
     else:
         encoded = encode_training_set(pipe, manifest, samples, resolution, SEED)
+        validate_encodings(encoded, len(samples), resolution)
         save_state(cache, {"settings": settings, "data": encoded})
+        write_json(work / "encodings.json", {"protocol_hash": fingerprint, "sha256": file_hash(cache)})
+    validate_encodings(encoded, len(samples), resolution)
     model = pipe.unet
     del pipe
     torch.cuda.empty_cache()
@@ -117,12 +160,24 @@ def train(manifest: Path, output: Path, work: Path, resolution: int, rank: int):
     scaler = torch.amp.GradScaler("cuda")
     order = torch.randperm(len(samples), generator=torch.Generator().manual_seed(SEED)).tolist()
     rng = torch.Generator(device=DEVICE).manual_seed(SEED + 1)
-    checkpoint = work / "resume.pt"
+    checkpoint = work / "resume.json"
     offset, updates, losses = 0, 0, []
     if checkpoint.is_file():
-        resume = torch.load(checkpoint, map_location="cpu", weights_only=True)
+        pointer = read_json(checkpoint)
+        name = pointer["file"]
+        if Path(name).name != name:
+            raise ValueError("Invalid checkpoint path")
+        resume = load_checked_state(work / "checkpoints" / name, checkpoint, fingerprint)
         if resume["settings"] != settings:
             raise ValueError("The resume checkpoint does not match this training run.")
+        expected = get_peft_model_state_dict(model)
+        if set(resume["adapter"]) != set(expected) or any(
+            value.shape != expected[key].shape or not torch.isfinite(value).all()
+            for key, value in resume["adapter"].items()
+        ):
+            raise ValueError("Invalid resumed adapter tensors")
+        if not 0 <= resume["offset"] <= len(samples) or resume["updates"] != math.ceil(resume["offset"] / ACCUMULATE):
+            raise ValueError("Invalid training progress checkpoint")
         set_peft_model_state_dict(model, resume["adapter"])
         optimizer.load_state_dict(resume["optimizer"])
         scaler.load_state_dict(resume["scaler"])
@@ -159,11 +214,13 @@ def train(manifest: Path, output: Path, work: Path, resolution: int, rank: int):
         updates += 1
         losses.append(total_loss / len(batch))
         if updates % 25 == 0 or offset == len(order):
-            save_state(checkpoint, {
+            state_path = work / "checkpoints" / f"{updates}-{session_id()}.pt"
+            save_state(state_path, {
                 "settings": settings, "offset": offset, "updates": updates, "losses": losses,
                 "adapter": get_peft_model_state_dict(model), "optimizer": optimizer.state_dict(),
                 "scaler": scaler.state_dict(), "rng": rng.get_state(),
             })
+            write_json(checkpoint, {"file": state_path.name, "protocol_hash": fingerprint, "sha256": file_hash(state_path)})
             print(f"Update {updates} · {offset}/{len(order)} pairs · mean loss {sum(losses[-25:]) / len(losses[-25:]):.5f}", flush=True)
 
     state = convert_state_dict_to_diffusers(get_peft_model_state_dict(model))

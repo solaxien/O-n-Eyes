@@ -42,9 +42,7 @@ def resolve_taesd() -> tuple[Path, int]:
     return destination, sum((destination / path).stat().st_size for path in files)
 
 
-def resolve_model(key: str, precision: str, *, include_safety: bool = True) -> tuple[Path, int]:
-    checkpoint = CHECKPOINTS[key]
-    destination = models_root() / key / precision
+def model_files(precision: str, *, include_safety: bool = True) -> list[str]:
     suffix = ".fp16.safetensors" if precision == "fp16" else ".safetensors"
     files = [
         "model_index.json",
@@ -60,6 +58,13 @@ def resolve_model(key: str, precision: str, *, include_safety: bool = True) -> t
         if component == "safety_checker" and not include_safety:
             continue
         files.extend((f"{component}/config.json", f"{component}/{filename}{suffix}"))
+    return files
+
+
+def resolve_model(key: str, precision: str, *, include_safety: bool = True) -> tuple[Path, int]:
+    checkpoint = CHECKPOINTS[key]
+    destination = models_root() / key / precision
+    files = model_files(precision, include_safety=include_safety)
 
     if not all((destination / path).is_file() for path in files):
         snapshot_download(
