@@ -23,8 +23,15 @@ jobs:
           sudo apt-get install -y ninja-build
       - name: Install and verify the tested NDK
         run: |
-          sdkmanager "ndk;$P3_NDK_VERSION"
-          ndk="$ANDROID_HOME/ndk/$P3_NDK_VERSION"
+          ndk="${ANDROID_HOME:?Android SDK directory is required}/ndk/$P3_NDK_VERSION"
+          if [[ ! -f "$ndk/source.properties" ]]; then
+            p3_sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+            if [[ ! -x "$p3_sdkmanager" ]]; then
+              echo "::error::Android SDK command-line tools are missing: $p3_sdkmanager"
+              exit 1
+            fi
+            "$p3_sdkmanager" --sdk_root="$ANDROID_HOME" --install "ndk;$P3_NDK_VERSION"
+          fi
           grep -Fx "Pkg.Revision = $P3_NDK_VERSION" "$ndk/source.properties"
           echo "P3_NDK_HOME=$ndk" >> "$GITHUB_ENV"
       - name: Compile the ARM64 CPU runner

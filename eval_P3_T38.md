@@ -37,4 +37,4 @@ The visual audit identifies both genuine generation failures and a crop-color sc
 
 No NVIDIA T4 or external GPU was used for this review, as requested by the user. Permanent public hosting and Docker runtime validation remain pending. The earlier temporary URL is not a guarantee of current availability.
 
-The [refreshed temporary URL](https://holland-comedy-screensavers-rare.trycloudflare.com) passed six public desktop/phone-width requests in 0.76–2.28 seconds on 7 November. Inference ran on the laptop GPU. The laptop and tunnel must stay online. [New review displayed in the app](https://holland-comedy-screensavers-rare.trycloudflare.com/review.html)
+The [refreshed temporary URL](https://holland-comedy-screensavers-rare.trycloudflare.com) passed six public desktop/phone-width requests in 0.76–2.28 seconds on 7 November. A separate Chrome check on the physical Poco F6 displayed a 512 px image in 2.42 seconds with no page overflow. Inference ran on the laptop GPU. The laptop and tunnel must stay online. [New review displayed in the app](https://holland-comedy-screensavers-rare.trycloudflare.com/review.html)

@@ -4,7 +4,7 @@
 
 P3 Image Lab runs a compact pretrained text-to-image diffusion model in a worker we control. The browser presents the raw VAE decode, the result after classical CV, and measured baseline comparisons. The Android benchmark runs the model directly on a Poco F6.
 
-The refreshed demo uses this laptop's RTX 4050 through a temporary HTTPS tunnel. Six public browser checks on 7 November took 0.76–2.28 seconds. It stays available only while the laptop, model worker and tunnel are online. [Open P3 Image Lab](https://holland-comedy-screensavers-rare.trycloudflare.com) · [Latest review](https://holland-comedy-screensavers-rare.trycloudflare.com/review.html)
+The refreshed demo uses this laptop's RTX 4050 through a temporary HTTPS tunnel. Six public browser checks on 7 November took 0.76–2.28 seconds; a separate check in Chrome on the physical Poco F6 displayed a 512 px image in 2.42 seconds. It stays available only while the laptop, model worker and tunnel are online. [Open P3 Image Lab](https://holland-comedy-screensavers-rare.trycloudflare.com) · [Latest review](https://holland-comedy-screensavers-rare.trycloudflare.com/review.html)
 
 The implementation review adds strict benchmark provenance, verified adapter-aware native export, expanded device diagnostics, and a manual composition audit. Historical measurements remain intact. [Review results and limitations](docs/REVIEW_RESULTS.md) · [Reproduction protocol](docs/REPRODUCIBILITY.md) · [Deployment](docs/DEPLOYMENT.md)
 

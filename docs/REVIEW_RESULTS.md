@@ -80,7 +80,9 @@ The interrupted base-control attempt after a Windows sharing error remains in it
 
 ## Remaining limits
 
-The refreshed [temporary public demo](https://holland-comedy-screensavers-rare.trycloudflare.com) was tested after the final adaptive fix on 7 November. Six actual browser requests at desktop and phone widths took **0.76–2.28 s**, including transport and display. These are browser-layout tests through the laptop GPU, not native-phone inference. The previous tunnel no longer resolved. The replacement is also temporary and needs this laptop to remain online. The site labels its original benchmark tables historical and links the new [review page](https://holland-comedy-screensavers-rare.trycloudflare.com/review.html).
+The refreshed [temporary public demo](https://holland-comedy-screensavers-rare.trycloudflare.com) was tested after the final adaptive fix on 7 November. Six actual browser requests at desktop and phone widths took **0.76–2.28 s**, including transport and display. A separate check in Chrome on the physical Poco F6 displayed a 512 px image in **2.42 s**, with no page overflow. All seven requests used the laptop GPU; these are not native-phone inference timings. [Browser check records](evidence/browser-review.json)
+
+The previous tunnel no longer resolved. The replacement is also temporary and needs this laptop to remain online. The site labels its original benchmark tables historical and links the new [review page](https://holland-comedy-screensavers-rare.trycloudflare.com/review.html). The review page also passed 390 px and 1,280 px layout checks, with all 17 result rows present.
 
 The native CPU route does not meet ten-second inference or the proposed semantic-quality gates. Device-side CV, an adapted Q8 export, accelerator operator parity, and sustained thermal evaluation remain future work. Adreno outputs previously failed and are not relabeled as successful generation.
 
