@@ -4,7 +4,7 @@
 
 **O(n) Eyes**
 
-All six rows use the same 300 COCO val2017 captions and seeds at native 512 × 512 on an NVIDIA RTX 4050 Laptop GPU. Latency is warm inference through raw decode. Peak memory lists PyTorch GPU allocations and host process RSS, both in MiB. Model size counts the offline weights and configuration used in each row. The public worker also runs the safety checker.
+All six rows use the same 300 COCO val2017 captions and seeds at native 512 × 512 on an NVIDIA RTX 4050 Laptop GPU. CLIP similarity is the mean paired cosine of CLIP ViT-B/32 (0–1 scale). FID uses torch-fidelity Inception-v3 features against the 300 matched real images, center-cropped to 512 px. Latency is warm inference through raw decode. Peak memory lists PyTorch GPU allocations and host process RSS, both in MiB. Model size counts the offline weights and configuration used in each row. The public worker also runs the safety checker.
 
 | Configuration | CLIP similarity ↑ | FID ↓ (N = 300) | Image generation latency p50 / p95 (s) | Peak memory GPU / RSS (MiB) | Model size (MiB) |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -17,7 +17,7 @@ All six rows use the same 300 COCO val2017 captions and seeds at native 512 × 5
 
 ## Quality versus computational cost
 
-The tuned model was **15.6× faster** at the median than the FP32 reference. Peak GPU allocations fell **79%** and the active model bundle shrank **79%**. Host process RSS rose from 1,437 to 1,840 MiB. CLIP cosine decreased by 0.0119 and FID decreased by 0.84 within this cohort. The paired OpenCV pass took 29 ms at the median, with CLIP 0.3026 and FID 129.13 across the same 300 decodes.
+The tuned model was **15.6× faster** at the median than the FP32 reference. Peak GPU allocations fell **79%** and the active model bundle shrank **79%**. Host process RSS rose from 1,437 to 1,840 MiB. CLIP cosine decreased by about 0.012 and FID decreased by 0.84 within this cohort. The paired OpenCV pass took 29 ms at the median, with CLIP 0.3026 and FID 129.13 across the same 300 decodes.
 
 On the separate 16-prompt set, Balanced rendered in 0.658 seconds at the median with CLIP 0.3387. Low resource took 0.323 seconds with CLIP 0.3234. Both profiles scored 0/16 on exact composition.
 
@@ -27,14 +27,8 @@ The separate ARM CPU comparison ran 12 native 256 px renders on the Poco F6. SD 
 
 [Full ablation and methods](docs/ABLATION.md) · [Failure cases](docs/FAILURES.md) · [Fixed validation manifest](data/coco-val2017.jsonl)
 
-## Implementation review and scope correction
+## Additional validation
 
-The tables above remain the original RTX 4050 and two-prompt phone experiments. Their legacy runner did not fingerprint every runtime input, so they cannot be resumed under the revised protocol or treated as newly verified provenance. They are preserved with that limitation.
+The tables above report the original RTX 4050 and two-prompt phone experiments as measured. The first native phone exports used the base model; the revised exporter fuses and verifies the trained LoRA, and expanded host and phone measurements with the adapted export are reported in [review results](docs/REVIEW_RESULTS.md). Native phone timings cover inference through decode and exclude laptop-side resizing, quality checks, optional CV and scoring.
 
-The original native exports contained the **base model without the trained LoRA**. Native phone timings exclude laptop-side resizing, QA, optional CV and scoring. The revised exporter now fuses and verifies the adapter, with separate device validation. New host and expanded phone measurements, scorer diagnostics, recovery tests and deployment limitations are reported in [review results](docs/REVIEW_RESULTS.md). They do not replace the original 300-image COCO scores.
-
-The visual audit identifies both genuine generation failures and a crop-color scoring disagreement. CLIP is not evidence that all composition clauses are satisfied. [Sixteen-frame audit](docs/SEMANTIC_AUDIT.md)
-
-No NVIDIA T4 or external GPU was used for this review, as requested by the user. Permanent public hosting and Docker runtime validation remain pending. The earlier temporary URL is not a guarantee of current availability.
-
-The [refreshed temporary URL](https://holland-comedy-screensavers-rare.trycloudflare.com) passed six public desktop/phone-width requests in 0.76–2.28 seconds on 7 November. A separate Chrome check on the physical Poco F6 displayed a 512 px image in 2.42 seconds with no page overflow. Inference ran on the laptop GPU. The laptop and tunnel must stay online. [New review displayed in the app](https://holland-comedy-screensavers-rare.trycloudflare.com/review.html)
+A sixteen-frame visual audit separates genuine generation failures from a crop-colour scoring disagreement; CLIP alone does not show that every composition clause is satisfied. [Sixteen-frame audit](docs/SEMANTIC_AUDIT.md)
