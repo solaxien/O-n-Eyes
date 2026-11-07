@@ -4,7 +4,9 @@
 
 P3 Image Lab runs a compact pretrained text-to-image diffusion model in a worker we control. The browser presents the raw VAE decode, the result after classical CV, and measured baseline comparisons. The Android benchmark runs the model directly on a Poco F6.
 
-The live demo uses an RTX 4050 Laptop GPU and a temporary HTTPS tunnel. The link is available while the laptop, inference worker, and tunnel are online. [Open P3 Image Lab](https://policies-departmental-consisting-trunk.trycloudflare.com)
+The refreshed demo uses this laptop's RTX 4050 through a temporary HTTPS tunnel. Six public browser checks on 7 November took 0.76–2.28 seconds; a separate check in Chrome on the physical Poco F6 displayed a 512 px image in 2.42 seconds. It stays available only while the laptop, model worker and tunnel are online. [Open P3 Image Lab](https://holland-comedy-screensavers-rare.trycloudflare.com) · [Latest review](https://holland-comedy-screensavers-rare.trycloudflare.com/review.html)
+
+The implementation review adds strict benchmark provenance, verified adapter-aware native export, expanded device diagnostics, and a manual composition audit. Historical measurements remain intact. [Review results and limitations](docs/REVIEW_RESULTS.md) · [Reproduction protocol](docs/REPRODUCIBILITY.md) · [Deployment](docs/DEPLOYMENT.md)
 
 ## Run the web demo
 
@@ -15,6 +17,8 @@ docker build -t p3-image-lab . && docker run --rm --gpus all -p 7860:7860 -v p3-
 ```
 
 Open [localhost:7860](http://localhost:7860). The first launch downloads the pinned public weights into the volume. The UI shows worker status while the model loads.
+
+For a persistent container service with weight caching, readiness checks and restart policy, use `docker compose -f deploy/compose.yaml up --build -d`. This needs a Docker-equipped NVIDIA host; container execution has not been tested on the current Windows laptop. `/api/ready` returns HTTP 503 until the model is ready. A permanent public endpoint still requires an available host and HTTPS routing.
 
 For Windows or Linux with Python 3.12–3.14 and a CUDA-compatible NVIDIA driver, create a virtual environment and use these commands.
 
@@ -34,12 +38,14 @@ python -m p3.fetch_coco --split train --count 1000 --out .runs/data/train
 mkdir -p .runs/data/val
 cp data/coco-val2017.jsonl .runs/data/val/manifest.jsonl
 python -m p3.fetch_coco --split validation --count 300 --out .runs/data/val
-python -m p3.train_lora --manifest .runs/data/train/manifest.jsonl --out p3/weights/t38-coco.safetensors
+python -m p3.train_lora --manifest .runs/data/train/manifest.jsonl --out .models/training/t38-coco-new.safetensors --work .runs/training-v2
 ```
 
-The adapter trains for one pass over train2017 using rank-4 attention LoRA. The training command resumes from the checkpoint in `.runs/training`. The app loads the bundled adapter if present. Set `P3_ADAPTER` to load an alternate local adapter. The fixed validation manifest selects one caption per image and adds an evaluation seed. Its captions are from the COCO Consortium under CC BY 4.0, indexed via the Hugging Face dataset mirror. [COCO terms](https://github.com/cocodataset/cocodataset.github.io/blob/master/dataset/termsofuse.htm), [Caption index](https://huggingface.co/datasets/phiyodr/coco2017)
+The adapter trains for one pass over train2017 using rank-4 attention LoRA. New training uses a fresh work directory and output filename. Existing adapters and legacy training caches are preserved. The app loads the bundled adapter if present. Set `P3_ADAPTER` to load an alternate local adapter. The fixed validation manifest selects one caption per image and adds an evaluation seed. Its captions are from the COCO Consortium under CC BY 4.0, indexed via the Hugging Face dataset mirror. [COCO terms](https://github.com/cocodataset/cocodataset.github.io/blob/master/dataset/termsofuse.htm), [Caption index](https://huggingface.co/datasets/phiyodr/coco2017)
 
 ## Evaluate the six configurations
+
+Use a fresh output directory when running the revised evaluator. Protocol changes are rejected, and legacy experiments cannot be resumed under a new identity. The `.runs/coco` paths below are examples for a fresh checkout; preserve an existing historical `.runs/coco` and substitute a new name. [Recovery, controlled comparisons and tests](docs/REPRODUCIBILITY.md)
 
 ```sh
 for variant in baseline baseline-half tiny25 tiny20 taesd tuned; do
@@ -76,5 +82,7 @@ The same generation and scoring commands accept `data/composition.jsonl` for a s
 - [Evaluation for Team T38](eval_P3_T38.md)
 - [Android benchmark setup](android/README.md)
 - [Initial blueprint](P3_BLUEPRINT.md)
+- [Visual composition audit](docs/SEMANTIC_AUDIT.md)
+- [Mobile feasibility](docs/MOBILE_FEASIBILITY.md)
 
 The weights remain under their upstream licenses. The worker downloads only the required files and retains the checkpoints' safety checker. [SD v1.4](https://huggingface.co/CompVis/stable-diffusion-v1-4), [BK-SDM-Tiny-2M](https://huggingface.co/nota-ai/bk-sdm-tiny-2m)

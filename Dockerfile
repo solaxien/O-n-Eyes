@@ -12,5 +12,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cu128 \
     && pip install --no-cache-dir -r requirements.txt
 COPY p3/ ./p3/
+RUN useradd --create-home --uid 1000 appuser && mkdir -p /weights && chown -R appuser:appuser /weights /app
+USER appuser
 EXPOSE 7860
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15m --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/api/ready', timeout=4)"
 CMD ["python", "-m", "uvicorn", "p3.app:app", "--host", "0.0.0.0", "--port", "7860"]

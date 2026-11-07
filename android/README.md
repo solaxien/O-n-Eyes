@@ -2,9 +2,11 @@
 
 The benchmark runs diffusion directly on the ARM CPU of a Poco F6 with Android 16. The runner uses four threads and one model context across the warm-up and timed prompts. It records inference wall time, peak process RSS, model load time, and weight bundle size. The host checks the native pixels before counting a run. Optional OpenCV enhancements on the pulled images are timed separately.
 
+The published two-prompt table used unadapted base models. The full hosted pipeline, including its safety checker and OpenCV stages, does not run inside this executable. [Feasibility budgets and remaining validation](../docs/MOBILE_FEASIBILITY.md)
+
 ## Build
 
-Download `p3-native-android-arm64` from the Build Android benchmark workflow or build it locally with NDK r30, CMake, and Ninja. `ANDROID_NDK_HOME` should point to the NDK directory. [Build workflow](../.github/workflows/android.yml)
+Download `p3-native-android-arm64` from the Build Android benchmark workflow or build it locally with **NDK 30.0.16248370 (r30)**, CMake, and Ninja. `ANDROID_NDK_HOME` should point to that exact directory. Install it with `sdkmanager "ndk;30.0.16248370"` and check `source.properties` before building. CI installs and verifies this revision and packages `build-provenance.json` with the binary. [Build workflow](../.github/workflows/android.yml) · [Official version](https://developer.android.com/ndk/downloads)
 
 ```sh
 mkdir -p .tools
@@ -32,6 +34,19 @@ sd-cli -M convert -m .models/mobile/tiny-f16.safetensors --type q8_0 -o .models/
 python -c 'from p3.models import resolve_taesd; resolve_taesd()'
 ```
 
+The exporter now checks the converter's SHA-256, refuses to overwrite an existing export, and writes a `.safetensors.json` provenance sidecar. To export the actual adapted Tiny checkpoint, add the adapter explicitly:
+
+```sh
+python -m p3.export_mobile --model tiny \
+  --converter convert_diffusers_to_original_stable_diffusion.py \
+  --adapter p3/weights/t38-coco.safetensors \
+  --out .models/mobile/tiny-t38-f16.safetensors
+```
+
+Fusion uses the same Diffusers/PEFT path and precision as the hosted model. It rejects unsupported non-U-Net adapters and zero-change fusion. Every converted tensor is checked for finite values and exact agreement with its mapped source. Provenance includes the pinned checkpoint, converter, adapter, software, changed tensors, artifact checksum and size. Tensor verification alone is not decoded-image validation; run and inspect native outputs too. The sidecar records export-time status, while the device run separately links decoded images to that exact artifact hash.
+
+The historical Q8 artifact has no trained adapter. Applying the adapter after that export is not implicit. A future adapted Q8 conversion needs a new artifact, quantizer provenance and fresh decoded-image checks.
+
 ## Run
 
 Connect one phone over USB and authorize USB debugging. These commands run the first two prompts in the same order with fixed seeds, 256 px native resolution, DPM++ 2M, and TAESD. Each configuration runs a separate warm-up before recording the two timings. The study compares SD v1.4 and Tiny at 25 and eight steps in FP16, then tests six steps and Q8_0 storage on Tiny.
@@ -58,3 +73,5 @@ p3_mobile --variant tiny-f16-25 --label "BK-SDM-Tiny FP16 · 25 steps" \
 ```
 
 Use `--adb` if the Platform Tools binary is outside `PATH`. `--limit 1` shortens a smoke run. Peak RSS is the high-water mark for the runner process. The bundle size includes the exported checkpoint and external TAESD weights. Timing covers model inference through decoded pixels. The benchmark then pulls the image, runs the pixel quality check, and resizes it to 512 px on the laptop.
+
+For the expanded review, omit `--limit 2`, use six steps and the full 16-prompt manifest, select the newly verified base/adapted files, and write to a new `.runs/review-mobile` directory. Use distinct `base-f16-6` and `adapted-f16-6` IDs. The new runner verifies checksums on the phone, saves each returned frame immediately, retains raw failures, logs thermal/battery observations, and resumes only matching protocols. It never silently combines the old two-prompt results with this cohort. A changed code version, export sidecar, manifest, backend, or device build requires a new experiment directory.

@@ -26,3 +26,15 @@ The public demo displayed a 512 px image in **2.47 seconds** in Chrome on a phys
 The separate ARM CPU comparison ran 12 native 256 px renders on the Poco F6. SD v1.4 FP16 at 25 steps took a median 218.6 seconds and 2,564 MiB peak process RSS. Tiny Q8_0 at six steps took 37.5 seconds and 761 MiB. Its bundle was 824 MiB including TAESD. The two-image prompt pair exposes substantial errors in object count, color, and position. The tested Adreno paths produced unusable outputs.
 
 [Full ablation and methods](docs/ABLATION.md) · [Failure cases](docs/FAILURES.md) · [Fixed validation manifest](data/coco-val2017.jsonl)
+
+## Implementation review and scope correction
+
+The tables above remain the original RTX 4050 and two-prompt phone experiments. Their legacy runner did not fingerprint every runtime input, so they cannot be resumed under the revised protocol or treated as newly verified provenance. They are preserved with that limitation.
+
+The original native exports contained the **base model without the trained LoRA**. Native phone timings exclude laptop-side resizing, QA, optional CV and scoring. The revised exporter now fuses and verifies the adapter, with separate device validation. New host and expanded phone measurements, scorer diagnostics, recovery tests and deployment limitations are reported in [review results](docs/REVIEW_RESULTS.md). They do not replace the original 300-image COCO scores.
+
+The visual audit identifies both genuine generation failures and a crop-color scoring disagreement. CLIP is not evidence that all composition clauses are satisfied. [Sixteen-frame audit](docs/SEMANTIC_AUDIT.md)
+
+No NVIDIA T4 or external GPU was used for this review, as requested by the user. Permanent public hosting and Docker runtime validation remain pending. The earlier temporary URL is not a guarantee of current availability.
+
+The [refreshed temporary URL](https://holland-comedy-screensavers-rare.trycloudflare.com) passed six public desktop/phone-width requests in 0.76–2.28 seconds on 7 November. A separate Chrome check on the physical Poco F6 displayed a 512 px image in 2.42 seconds with no page overflow. Inference ran on the laptop GPU. The laptop and tunnel must stay online. [New review displayed in the app](https://holland-comedy-screensavers-rare.trycloudflare.com/review.html)

@@ -1,5 +1,9 @@
 # P3 Failure Case Analysis
 
+The review expands this analysis to [all sixteen historical composition frames](SEMANTIC_AUDIT.md), including a concrete crop-color scorer disagreement. [New phone and host results](REVIEW_RESULTS.md) retain exact and per-clause outcomes separately from CLIP.
+
+New regression checks reproduce corrupt image reuse, protocol mixing, stale scores, interrupted JSON, and concurrent-writer hazards. The fixes preserve old experiments and require new identities for changed settings. A real Windows file-sharing error during the expanded phone control led to a bounded atomic-replace retry and fewer metadata writes. That interrupted control is retained separately. [Recovery details](REPRODUCIBILITY.md)
+
 These examples use the tuned BK-SDM-Tiny-2M checkpoint, the COCO LoRA, TAESD, and 20 DPM-Solver++ calls at 512 × 512. They come from a four-prompt composition pilot separate from COCO val2017. The pilot averaged 0.3581 CLIP cosine before CV and 0.3586 after CV. All four prompts failed at least one automatic count, color, or position check.
 
 | Case | Prompt and seed | Visible failure | Effect of CV |

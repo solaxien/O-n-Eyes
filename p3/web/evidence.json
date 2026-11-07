@@ -1,5 +1,5 @@
 {
-  "note": "Hosted browser latency includes transport and display. The laptop study times raw generation. The native benchmark uses the Poco F6\u2019s ARM CPU.",
+  "note": "Historical experiments: the original 300-image RTX 4050 study and two-prompt phone cohort. Browser timings use the server GPU. The source review documents newer validation and limitations.",
   "highlights": [
     {
       "label": "Host median speedup",
@@ -533,7 +533,7 @@
     },
     {
       "title": "Poco F6 \u00b7 native ARM CPU",
-      "description": "Two fixed prompts at native 256 px per row, with TAESD and four CPU threads. Adreno attempts returned unusable outputs and were excluded.",
+      "description": "Historical base-model results without the trained LoRA: two prompts at native 256 px per row, TAESD and four ARM CPU threads. Resize, QA and optional CV run on the laptop. Failed Adreno outputs are excluded.",
       "rows": [
         {
           "label": "Poco F6 - SD v1.4 FP16 - 25 steps",

@@ -15,12 +15,15 @@ flowchart TD
     I["Paired prompt and seed manifest"] --> D
     I --> J["Poco F6 · native ARM64 diffusion runner"]
     J --> K["Device timings and memory"]
+    J --> M["Pull raw native pixels to host"]
+    M --> N["Host-only resize, QA, optional CV and scoring"]
+    O["Verified base or fused-LoRA export"] --> J
     H --> L["Offline CLIP, composition, and COCO FID"]
 ```
 
 The hosted path runs Python, PyTorch, Diffusers components, and OpenCV on the inference host. Browser requests carry only prompt and profile settings. The browser polls the job endpoint for queue, encoding, denoising, decoding, and packaging states. A single worker serializes model use and the queue caps outstanding work at two requests. Finished images expire after three minutes and remain in bounded process memory.
 
-The mobile performance track uses the same model families on the physical Poco F6. A pinned stable-diffusion.cpp runner uses four ARM CPU threads, memory-mapped weights, and TAESD. The runner holds the native shape, sampler, decoder, prompt pair, and seed pair constant while changing denoiser architecture, step count, or weight storage. The public site presents the Android and hosted measurements separately. [Android build and run instructions](../android/README.md)
+The mobile performance track uses the same model families on the physical Poco F6. A pinned stable-diffusion.cpp runner uses four ARM CPU threads, memory-mapped weights, and TAESD. The original two-prompt results used **base checkpoints without the trained LoRA**. The new exporter can fuse and verify the adapter before conversion; its separate device validation is identified by the exported artifact hash. The Android executable performs prompt encoding, denoising, and decoding. Resize, quality gating, optional OpenCV, and offline scoring run on the laptop after pulling native pixels. The native executable does not include the hosted safety checker. [Android build and run instructions](../android/README.md)
 
 ## Generation and budget
 
@@ -38,6 +41,8 @@ The compact checkpoint removes U-Net blocks and distills the teacher’s outputs
 
 Auto mode starts with the full quality profile when its warm-up estimate, remaining time, and free GPU memory fit. It can choose Balanced or Low resource instead. A GPU out-of-memory error can trigger one smaller run if time remains. The same one-retry limit applies to unusable decodes. The browser shows the actual resolution, denoiser calls, decoder, and adapter used.
 
+A failed Quality warm-up uses a finite conservative estimate and a 30-second Auto cooldown. An explicit Quality request can retry when the memory/time checks pass. After cooldown, Auto can recalibrate Quality through a successful request. Successful observations recover even a legacy infinite estimate. If no eligible profile fits the remaining budget, the worker fails before starting inference. Runtime OOM and pixel-quality handling share the single-retry limit.
+
 ## Classical vision
 
 All measurements and corrections run at native resolution. The pipeline uses median residuals and a gradient mask to localize isolated speckles, and Telea inpainting on tiny masks. Bilateral filtering on Lab luminance reduces flat-region noise while retaining edges. Low-contrast scenes receive a small CLAHE blend, and near-neutral midtones can trigger a bounded chroma correction. The gate checks clipping, edge retention, luminance range, and suspected artifact fraction. If a correction exceeds the clipping or edge-loss guard, the raw decode remains available. Area interpolation downsamples previews and bicubic interpolation enlarges low-resolution outputs.
@@ -51,3 +56,17 @@ The host benchmark records the exact model, sampler, resolution, precision, deco
 On Windows the FP32 benchmark can load each tensor onto CUDA individually. After a CUDA interruption, this path bypassed the PyTorch memory-mapping crash and reproduced a saved image pixel for pixel. The timed study resumed from the saved samples after a separate warm-up.
 
 Worker latency covers synchronized encoding, denoising, decoding, safety, and CV. Browser latency additionally covers queue, transport, and image decode. The offline quality study scores raw model outputs before the public worker's safety check. Its latency and bundle size use the components present in those offline runs. PyTorch reports peak allocated GPU bytes and process RSS is sampled independently. Mobile reports the native artifact bytes and physical process memory measured by its runner.
+
+## Experiment integrity and evaluation scope
+
+New runs use immutable content-hashed protocols and atomic per-image checkpoints. Model, adapter, inference source, hardware, software, scheduler settings, and the ordered manifest all participate. Incompatible resumes fail before old evidence is changed. Completed images are decoded and hash-checked. Each resumed session retains separate warm-up metadata. Regeneration archives stale scores; reports verify image/record provenance before using new scores. Historical results without these records remain labeled legacy evidence. [Exact protocol and reproduction](REPRODUCIBILITY.md)
+
+The review's diagnostic comparisons isolate architecture, steps, scheduler, decoder, adapter, guidance, and CV as far as their runtime definitions permit. CLIP measures global alignment. Per-clause counts, colors, and relations remain separate and include detector diagnostics and visual-review caveats. No distribution metric is computed on a 16-image composition set. [Visual audit](SEMANTIC_AUDIT.md)
+
+## Deployment and operating limits
+
+The UI's `/api/health` reports loading, failed, or ready. `/api/ready` returns HTTP 503 until the model can serve work, enabling container readiness checks. A non-root Docker service, persistent weight volume, restart policy, and bounded logs provide a reproducible service layout. Container execution still needs validation on a Docker-equipped host. A permanent HTTPS endpoint still needs continuously available hardware and DNS/hosting access. The temporary laptop tunnel does not guarantee uptime. [Deployment instructions](DEPLOYMENT.md)
+
+Local adapter loading passes its directory and explicit weight filename with `local_files_only=True`. This avoids Diffusers' filename-guessing failure when Hugging Face offline mode is enabled. The exporter uses the same explicit local selection. The review reproduced the failure and checked the corrected Python worker in offline mode.
+
+Native latency, memory, and quality acceptance budgets are separate from the hosted browser budget. Local CPU inference remains the validated phone backend. No T4 or external GPU is used in this review at the user's instruction. [Mobile feasibility and remaining work](MOBILE_FEASIBILITY.md)

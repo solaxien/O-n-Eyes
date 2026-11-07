@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import gc
 from io import BytesIO
 import logging
+import math
 import os
 from pathlib import Path
 import secrets
@@ -70,6 +71,7 @@ class Worker:
         self.generator: Generator | None = None
         self.state = "loading"
         self.estimates = {"balanced": 5.5, "quality": 7.5, "eco": 3.5, "cpu": 90.0}
+        self.quality_retry_after = 0.0
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="diffusion")
         self.executor.submit(self._load)
 
@@ -103,7 +105,7 @@ class Worker:
                     )
                     self.estimates["quality"] = 1.3 * warmup.metadata["generation_ms"] / 1000 + 0.35
                 except (GenerationError, torch.OutOfMemoryError):
-                    self.estimates["quality"] = float("inf")
+                    self._defer_quality()
                     torch.cuda.empty_cache()
             with self.lock:
                 self.generator = generator
@@ -122,6 +124,21 @@ class Worker:
                 "hardware": self.generator.hardware if self.generator else None,
                 "backend": self.generator.device if self.generator else None,
             }
+
+    def _defer_quality(self):
+        # Auto uses smaller profiles briefly; explicit Quality can still retry
+        # when memory and a conservative finite estimate fit its budget.
+        previous = self.estimates["quality"]
+        self.estimates["quality"] = max(7.5, previous if math.isfinite(previous) else 0.0)
+        self.quality_retry_after = perf_counter() + 30.0
+
+    def _observe(self, key: str, elapsed: float):
+        estimate = self.estimates[key]
+        if not math.isfinite(estimate):
+            estimate = 1.25 * elapsed
+        self.estimates[key] = max(0.35, 0.7 * estimate + 0.3 * 1.25 * elapsed)
+        if key == "quality":
+            self.quality_retry_after = 0.0
 
     def submit(self, request: ImageRequest) -> str:
         with self.lock:
@@ -166,7 +183,10 @@ class Worker:
                 job.stage, job.step, job.total = stage, step, total
 
         try:
-            key, reason = pick_profile(request.mode, generator.device, generator.free_bytes(), remaining(), self.estimates.__getitem__)
+            mode = request.mode
+            if mode == "auto" and perf_counter() < self.quality_retry_after:
+                mode = "balanced"
+            key, reason = pick_profile(mode, generator.device, generator.free_bytes(), remaining(), self.estimates.__getitem__)
             seed = request.seed if request.seed is not None else secrets.randbits(32)
             attempts = 1
             result = None
@@ -174,6 +194,8 @@ class Worker:
                 result = generator.generate(request.prompt, seed, PROFILES[key], progress=progress)
             except torch.OutOfMemoryError:
                 LOG.warning("GPU memory exhausted during %s generation", key)
+                if key == "quality":
+                    self._defer_quality()
             if result is None:
                 gc.collect()
                 if generator.device == "cuda":
@@ -193,7 +215,7 @@ class Worker:
                 if not result.metadata["cv"]["usable"]:
                     raise GenerationError("The quality check flagged the result. Try another seed or Quality mode.")
             elapsed = result.metadata["generation_ms"] / 1000
-            self.estimates[key] = max(0.35, 0.7 * self.estimates[key] + 0.3 * 1.25 * elapsed)
+            self._observe(key, elapsed)
             progress("Packaging image", result.metadata["steps"], result.metadata["steps"])
             raw = _webp(resize(result.raw, 512))
             enhanced = _webp(result.image)
@@ -233,6 +255,14 @@ app = FastAPI(title="P3 Image Lab", lifespan=lifespan, docs_url=None, redoc_url=
 @app.get("/api/health")
 def health(request: Request):
     return request.app.state.worker.health()
+
+
+@app.get("/api/ready")
+def ready(request: Request):
+    state = request.app.state.worker.health()
+    if state["status"] != "ready":
+        raise HTTPException(503, state)
+    return state
 
 
 @app.post("/api/jobs", status_code=202)

@@ -1,0 +1,351 @@
+{
+  "date": "2026-11-07",
+  "url": "https://holland-comedy-screensavers-rare.trycloudflare.com",
+  "scope": "Warm public-browser requests; all inference ran on the local RTX 4050 laptop. These are not native-phone inference measurements or an availability guarantee.",
+  "desktop_and_mobile_width": [
+    {
+      "layout": "desktop",
+      "mode": "auto",
+      "seed": 38,
+      "visible_ms": 2280,
+      "model": "nota-ai/bk-sdm-tiny-2m",
+      "revision": "aad3e0e8ba61b7cb9f64869dc4e586f8ad9d3665",
+      "hardware": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "backend": "cuda",
+      "precision": "fp16",
+      "weight_precision": "fp16",
+      "decoder": "taesd",
+      "safety_check": true,
+      "adapter": "t38-coco.safetensors",
+      "scheduler": "DPMSolverMultistepScheduler",
+      "profile": "Full quality",
+      "requested_steps": 20,
+      "guidance": 7.5,
+      "steps": 20,
+      "native_size": 512,
+      "display_size": 512,
+      "model_bytes": 1514111639,
+      "peak_vram_bytes": 1701899264,
+      "peak_reserved_vram_bytes": 1811939328,
+      "stages_ms": {
+        "encode": 70.21,
+        "denoise": 1503.52,
+        "decode_and_safety": 64.72,
+        "cv_and_resize": 22.22
+      },
+      "generation_ms": 1660.97,
+      "cv": {
+        "applied": [
+          "Speckle repair",
+          "Edge-aware denoising"
+        ],
+        "before": {
+          "luminance_span": 246,
+          "contrast": 183,
+          "clipped_fraction": 0.00728607177734375,
+          "laplacian_variance": 364.7134094238281
+        },
+        "after": {
+          "luminance_span": 246,
+          "contrast": 182,
+          "clipped_fraction": 0.0085296630859375,
+          "laplacian_variance": 276.038818359375
+        },
+        "artifact_fraction": 4.1961669921875e-05,
+        "usable": true
+      },
+      "queue_ms": 0.11,
+      "server_ms": 1809,
+      "attempts": 1,
+      "selection_reason": "Selected profile fits the current inference budget."
+    },
+    {
+      "layout": "desktop",
+      "mode": "auto",
+      "seed": 72,
+      "visible_ms": 1940,
+      "model": "nota-ai/bk-sdm-tiny-2m",
+      "revision": "aad3e0e8ba61b7cb9f64869dc4e586f8ad9d3665",
+      "hardware": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "backend": "cuda",
+      "precision": "fp16",
+      "weight_precision": "fp16",
+      "decoder": "taesd",
+      "safety_check": true,
+      "adapter": "t38-coco.safetensors",
+      "scheduler": "DPMSolverMultistepScheduler",
+      "profile": "Full quality",
+      "requested_steps": 20,
+      "guidance": 7.5,
+      "steps": 20,
+      "native_size": 512,
+      "display_size": 512,
+      "model_bytes": 1514111639,
+      "peak_vram_bytes": 1701899264,
+      "peak_reserved_vram_bytes": 1811939328,
+      "stages_ms": {
+        "encode": 35.77,
+        "denoise": 1226.45,
+        "decode_and_safety": 58.4,
+        "cv_and_resize": 20.9
+      },
+      "generation_ms": 1341.86,
+      "cv": {
+        "applied": [
+          "Speckle repair",
+          "Edge-aware denoising"
+        ],
+        "before": {
+          "luminance_span": 188,
+          "contrast": 128,
+          "clipped_fraction": 4.57763671875e-05,
+          "laplacian_variance": 1933.0992431640625
+        },
+        "after": {
+          "luminance_span": 186,
+          "contrast": 128,
+          "clipped_fraction": 3.0517578125e-05,
+          "laplacian_variance": 1797.74951171875
+        },
+        "artifact_fraction": 0.001049041748046875,
+        "usable": true
+      },
+      "queue_ms": 0.1,
+      "server_ms": 1486.23,
+      "attempts": 1,
+      "selection_reason": "Selected profile fits the current inference budget."
+    },
+    {
+      "layout": "desktop",
+      "mode": "eco",
+      "seed": 841,
+      "visible_ms": 760,
+      "model": "nota-ai/bk-sdm-tiny-2m",
+      "revision": "aad3e0e8ba61b7cb9f64869dc4e586f8ad9d3665",
+      "hardware": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "backend": "cuda",
+      "precision": "fp16",
+      "weight_precision": "fp16",
+      "decoder": "taesd",
+      "safety_check": true,
+      "adapter": "t38-coco.safetensors",
+      "scheduler": "DPMSolverMultistepScheduler",
+      "profile": "Low resource",
+      "requested_steps": 6,
+      "guidance": 7.5,
+      "steps": 6,
+      "native_size": 384,
+      "display_size": 512,
+      "model_bytes": 1514111639,
+      "peak_vram_bytes": 1628355584,
+      "peak_reserved_vram_bytes": 1816133632,
+      "stages_ms": {
+        "encode": 40.51,
+        "denoise": 313.95,
+        "decode_and_safety": 68.59,
+        "cv_and_resize": 10.9
+      },
+      "generation_ms": 434.41,
+      "cv": {
+        "applied": [
+          "Edge-aware denoising"
+        ],
+        "before": {
+          "luminance_span": 215,
+          "contrast": 171,
+          "clipped_fraction": 0.00016276041666666666,
+          "laplacian_variance": 359.6201171875
+        },
+        "after": {
+          "luminance_span": 215,
+          "contrast": 171,
+          "clipped_fraction": 0.00016954210069444444,
+          "laplacian_variance": 242.3917694091797
+        },
+        "artifact_fraction": 0,
+        "usable": true
+      },
+      "queue_ms": 0.08,
+      "server_ms": 549.18,
+      "attempts": 1,
+      "selection_reason": "Low resource mode selected for the requested mode or available memory."
+    },
+    {
+      "layout": "mobile-width",
+      "mode": "auto",
+      "seed": 38,
+      "visible_ms": 2110,
+      "model": "nota-ai/bk-sdm-tiny-2m",
+      "revision": "aad3e0e8ba61b7cb9f64869dc4e586f8ad9d3665",
+      "hardware": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "backend": "cuda",
+      "precision": "fp16",
+      "weight_precision": "fp16",
+      "decoder": "taesd",
+      "safety_check": true,
+      "adapter": "t38-coco.safetensors",
+      "scheduler": "DPMSolverMultistepScheduler",
+      "profile": "Full quality",
+      "requested_steps": 20,
+      "guidance": 7.5,
+      "steps": 20,
+      "native_size": 512,
+      "display_size": 512,
+      "model_bytes": 1514111639,
+      "peak_vram_bytes": 1701899264,
+      "peak_reserved_vram_bytes": 1816133632,
+      "stages_ms": {
+        "encode": 41.79,
+        "denoise": 1454,
+        "decode_and_safety": 68.36,
+        "cv_and_resize": 25.23
+      },
+      "generation_ms": 1589.8,
+      "cv": {
+        "applied": [
+          "Speckle repair",
+          "Edge-aware denoising"
+        ],
+        "before": {
+          "luminance_span": 246,
+          "contrast": 183,
+          "clipped_fraction": 0.00728607177734375,
+          "laplacian_variance": 364.7134094238281
+        },
+        "after": {
+          "luminance_span": 246,
+          "contrast": 182,
+          "clipped_fraction": 0.0085296630859375,
+          "laplacian_variance": 276.038818359375
+        },
+        "artifact_fraction": 4.1961669921875e-05,
+        "usable": true
+      },
+      "queue_ms": 0.08,
+      "server_ms": 1711.28,
+      "attempts": 1,
+      "selection_reason": "Selected profile fits the current inference budget."
+    },
+    {
+      "layout": "mobile-width",
+      "mode": "auto",
+      "seed": 72,
+      "visible_ms": 1990,
+      "model": "nota-ai/bk-sdm-tiny-2m",
+      "revision": "aad3e0e8ba61b7cb9f64869dc4e586f8ad9d3665",
+      "hardware": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "backend": "cuda",
+      "precision": "fp16",
+      "weight_precision": "fp16",
+      "decoder": "taesd",
+      "safety_check": true,
+      "adapter": "t38-coco.safetensors",
+      "scheduler": "DPMSolverMultistepScheduler",
+      "profile": "Full quality",
+      "requested_steps": 20,
+      "guidance": 7.5,
+      "steps": 20,
+      "native_size": 512,
+      "display_size": 512,
+      "model_bytes": 1514111639,
+      "peak_vram_bytes": 1701899264,
+      "peak_reserved_vram_bytes": 1816133632,
+      "stages_ms": {
+        "encode": 32.63,
+        "denoise": 1223.42,
+        "decode_and_safety": 59.49,
+        "cv_and_resize": 22.77
+      },
+      "generation_ms": 1338.65,
+      "cv": {
+        "applied": [
+          "Speckle repair",
+          "Edge-aware denoising"
+        ],
+        "before": {
+          "luminance_span": 188,
+          "contrast": 128,
+          "clipped_fraction": 4.57763671875e-05,
+          "laplacian_variance": 1933.0992431640625
+        },
+        "after": {
+          "luminance_span": 186,
+          "contrast": 128,
+          "clipped_fraction": 3.0517578125e-05,
+          "laplacian_variance": 1797.74951171875
+        },
+        "artifact_fraction": 0.001049041748046875,
+        "usable": true
+      },
+      "queue_ms": 0.17,
+      "server_ms": 1504.99,
+      "attempts": 1,
+      "selection_reason": "Selected profile fits the current inference budget."
+    },
+    {
+      "layout": "mobile-width",
+      "mode": "eco",
+      "seed": 841,
+      "visible_ms": 980,
+      "model": "nota-ai/bk-sdm-tiny-2m",
+      "revision": "aad3e0e8ba61b7cb9f64869dc4e586f8ad9d3665",
+      "hardware": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "backend": "cuda",
+      "precision": "fp16",
+      "weight_precision": "fp16",
+      "decoder": "taesd",
+      "safety_check": true,
+      "adapter": "t38-coco.safetensors",
+      "scheduler": "DPMSolverMultistepScheduler",
+      "profile": "Low resource",
+      "requested_steps": 6,
+      "guidance": 7.5,
+      "steps": 6,
+      "native_size": 384,
+      "display_size": 512,
+      "model_bytes": 1514111639,
+      "peak_vram_bytes": 1628355584,
+      "peak_reserved_vram_bytes": 1816133632,
+      "stages_ms": {
+        "encode": 19.73,
+        "denoise": 230.41,
+        "decode_and_safety": 57.39,
+        "cv_and_resize": 11.95
+      },
+      "generation_ms": 319.97,
+      "cv": {
+        "applied": [
+          "Edge-aware denoising"
+        ],
+        "before": {
+          "luminance_span": 215,
+          "contrast": 171,
+          "clipped_fraction": 0.00016276041666666666,
+          "laplacian_variance": 359.6201171875
+        },
+        "after": {
+          "luminance_span": 215,
+          "contrast": 171,
+          "clipped_fraction": 0.00016954210069444444,
+          "laplacian_variance": 242.3917694091797
+        },
+        "artifact_fraction": 0,
+        "usable": true
+      },
+      "queue_ms": 0.08,
+      "server_ms": 437.15,
+      "attempts": 1,
+      "selection_reason": "Low resource mode selected for the requested mode or available memory."
+    }
+  ],
+  "physical_phone": {
+    "hardware": "Poco F6",
+    "browser": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+    "width": 406,
+    "page_fits": true,
+    "image_width": 512,
+    "image_visible": true,
+    "visible_ms": 2420,
+    "steps": "20 calls"
+  }
+}

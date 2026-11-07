@@ -1,0 +1,22 @@
+services:
+  image-lab:
+    build:
+      context: ..
+    restart: unless-stopped
+    init: true
+    gpus: all
+    ports:
+      - "127.0.0.1:7860:7860"
+    volumes:
+      - weights:/weights
+    environment:
+      P3_DEVICE: cuda
+      P3_REQUEST_BUDGET: "10"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  weights:

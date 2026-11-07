@@ -24,6 +24,7 @@ class Profile:
     steps: int
     size: int
     scheduler: str = "dpmpp"
+    guidance: float = 7.5
 
 
 PROFILES = {
@@ -42,17 +43,19 @@ def pick_profile(
     estimate: Callable[[str], float],
 ) -> tuple[str, str]:
     if device == "cpu":
-        return "cpu", "CPU fallback selected because a CUDA worker is unavailable."
-    if mode == "eco":
-        return "eco", "Low resource mode selected."
-    requested = "quality" if mode == "auto" else mode
-    if free_bytes < 1_500_000_000:
-        return "eco", "Reduced resolution and steps for available GPU memory."
-    if remaining < estimate(requested):
-        if requested == "quality" and remaining >= estimate("balanced"):
-            return "balanced", "Balanced mode fits the remaining request budget."
-        return "eco", "Reduced resolution and steps for the remaining request budget."
-    return requested, "Selected profile fits the current inference budget."
+        candidates = ["cpu"]
+        reason = "CPU fallback selected because a CUDA worker is unavailable."
+    elif mode == "eco" or free_bytes < 1_500_000_000:
+        candidates = ["eco"]
+        reason = "Low resource mode selected for the requested mode or available memory."
+    else:
+        requested = "quality" if mode == "auto" else mode
+        candidates = ["quality", "balanced", "eco"] if requested == "quality" else ["balanced", "eco"]
+        reason = "Selected profile fits the current inference budget."
+    for key in candidates:
+        if remaining >= estimate(key):
+            return key, reason
+    raise GenerationError("No generation profile fits the remaining time budget. Try again with a larger budget.")
 
 
 @dataclass
@@ -128,7 +131,7 @@ class Generator:
         if adapter is not None:
             if not adapter.is_file() or adapter.suffix != ".safetensors":
                 raise ValueError("P3_ADAPTER must point to a local LoRA .safetensors file.")
-            self.pipe.load_lora_weights(str(adapter))
+            self.pipe.load_lora_weights(str(adapter.parent), weight_name=adapter.name, local_files_only=True)
             self.pipe.fuse_lora(safe_fusing=True)
             self.pipe.unload_lora_weights()
             self.model_bytes += adapter.stat().st_size
@@ -195,7 +198,7 @@ class Generator:
             batch = scheduler.scale_model_input(torch.cat((latents, latents)), timestep)
             predicted = pipe.unet(batch, timestep, encoder_hidden_states=embeddings, return_dict=False)[0]
             unconditional, conditional = predicted.chunk(2)
-            guided = unconditional + 7.5 * (conditional - unconditional)
+            guided = unconditional + profile.guidance * (conditional - unconditional)
             latents = scheduler.step(guided, timestep, latents, return_dict=False)[0]
             if progress:
                 progress("Denoising", step, denoiser_calls)
@@ -233,6 +236,7 @@ class Generator:
             "scheduler": type(scheduler).__name__,
             "profile": profile.name,
             "requested_steps": profile.steps,
+            "guidance": profile.guidance,
             "steps": denoiser_calls,
             "native_size": profile.size,
             "display_size": image.size[0],

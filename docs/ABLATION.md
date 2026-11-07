@@ -1,5 +1,7 @@
 # P3 Ablation Study
 
+The tables below retain the original studies. The [implementation review](REVIEW_RESULTS.md) adds controlled 16-prompt comparisons and expanded base/adapted phone exports. See the [comparison matrix](REPRODUCIBILITY.md) for isolated versus combined changes. The original 300-image measurements predate protocol fingerprints and remain historical evidence. The original phone table uses base weights, with resize/QA/CV on the host.
+
 ## Laptop GPU study
 
 All six rows generated the same 300 COCO val2017 captions at native 512 × 512 on an RTX 4050 Laptop GPU. The same seed gives the same FP32 initial noise before casting to each inference dtype. Each row had a separate warm-up. Timings end at the raw decode and omit the public safety checker. CLIP is the mean paired ViT-B/32 cosine. FID uses canonical Inception-v3 features and 300 matched real references center-cropped to 512 px. The small, fixed cohort limits comparisons to these runs. [Validation manifest](../data/coco-val2017.jsonl) · [CLIP model](https://huggingface.co/openai/clip-vit-base-patch32) · [FID implementation](https://github.com/toshas/torch-fidelity)
