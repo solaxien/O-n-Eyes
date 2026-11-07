@@ -1,0 +1,1 @@
+{"id":"offline-fresh-627194","seed":627194,"prompt":"A studio photograph of one yellow banana to the right of one blue cup on a wooden table.","objects":[{"id":"banana","label":"banana","count":1,"color":"yellow"},{"id":"cup","label":"cup","count":1,"color":"blue"}],"relations":[["banana","right","cup"]]}
