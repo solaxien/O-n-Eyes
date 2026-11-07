@@ -1,0 +1,24 @@
+{
+  "deployment": {
+    "id": "appgdep_6aeef1c1806c8191a286c8b45c2a1082",
+    "project_id": "appgprj_6aeee74c2a588191bb5c9a521afdeb6d",
+    "title": "O(n) Eyes · On-device Image Lab",
+    "version_id": "appgprj_6aeee74c2a588191bb5c9a521afdeb6d~appgver_29583364ece88191a4aa211f6deec4aa",
+    "type": "publish",
+    "status": "succeeded",
+    "url": "https://on-eyes-device-lab-t38.brawnymoss1024.chatgpt.site",
+    "has_mcp": false,
+    "screenshot_asset_pointer": null,
+    "provider_deployment_id": "site---6aeee74c2a588191bb5c9a521afdeb6d",
+    "failure_message": null,
+    "env_set_revision": 0,
+    "updated_at": "2026-11-07T09:39:30.769515+00:00"
+  },
+  "source": {
+    "project_id": "appgprj_6aeee74c2a588191bb5c9a521afdeb6d",
+    "checkout_path": "C:/Users/amogh/Documents/Projects/P3_CV/.runs/browser-site",
+    "commit_sha": "da103f7084b3f4b0dfe2ba374af96ba566d59cfd",
+    "archive": "C:/Users/amogh/Documents/Projects/P3_CV/.runs/browser-site-v4.tar.gz"
+  },
+  "access_mode": "public"
+}

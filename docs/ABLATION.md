@@ -1,5 +1,7 @@
 # P3 Ablation Study
 
+The current browser study adds **48 matched phone generations** at 4/6/12 steps and a separate 16-frame component CV study. Six-step warm median latency was 7.744 s with CLIP 0.3001; twelve steps took 14.648 s with CLIP 0.3053. Every row passed 0/16 exact compositions. Full browser CV slightly reduced CLIP relative to raw, and its edge stage reduced two detector count passes. These are measured negative findings. [Complete on-device methods, tables, memory caveats and images](BROWSER_ON_DEVICE.md)
+
 The tables below retain the original studies. The [implementation review](REVIEW_RESULTS.md) adds controlled 16-prompt comparisons and expanded base/adapted phone exports. See the [comparison matrix](REPRODUCIBILITY.md) for isolated versus combined changes. The original 300-image measurements predate protocol fingerprints and remain historical evidence. The original phone table uses base weights, with resize/QA/CV on the host.
 
 ## Laptop GPU study

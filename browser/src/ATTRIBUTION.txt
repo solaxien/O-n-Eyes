@@ -1,0 +1,21 @@
+O(n) Eyes — Team T38, on-device browser experiment
+
+BK-SDM-Tiny-2M: Nota AI, https://huggingface.co/nota-ai/bk-sdm-tiny-2m
+Derived from Stable Diffusion v1.4. CreativeML Open RAIL-M applies to the
+adapted model and its use; see MODEL-LICENSE.txt. T38 modifications: COCO
+rank-4 LoRA fused into the denoiser, ONNX FP16 export, sequential guidance,
+few-step DPM-Solver++, and substitution of the tiny decoder below.
+
+TAESD: Ollin Boer Bohan, https://github.com/madebyollin/taesd
+MIT; see TAESD-LICENSE.txt.
+
+ONNX Runtime Web 1.31.1: Microsoft, https://github.com/microsoft/onnxruntime
+MIT; see ONNX-RUNTIME-LICENSE.txt.
+
+Exact model revisions, adapter digest and exported artifact SHA-256 hashes
+are published in /models/manifest.json. All inference runs in the visitor's
+browser. Downloads only deliver static model and application files.
+
+This research build does not include a content safety classifier. The model
+use restrictions still apply. Pixel checks measure contrast, clipping, edges
+and isolated artifacts; they do not establish semantic correctness or safety.

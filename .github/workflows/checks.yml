@@ -3,6 +3,19 @@ on: [pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: browser/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: browser
+      - run: npm test && npm run build
+        working-directory: browser
   evidence:
     runs-on: ubuntu-24.04
     steps:
