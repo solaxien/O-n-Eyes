@@ -35,10 +35,14 @@ await writeFile(
     manifest_bytes: manifest.length,
   }),
 );
+// Optional compact verifier. Its index ships with the app shell; the ONNX
+// file itself is a checksum-verified model asset under /models/.
+await copyFile(join(root, "verifier-manifest.json"), join(out, "verifier-index.json"));
 const assets = [
   "/",
   "/index.html",
   "/model-index.json",
+  "/verifier-index.json",
   ...(await readdir(join(root, "src")))
     .filter((x) => x !== "sw.js")
     .map((x) => "/" + x),

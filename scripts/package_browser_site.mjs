@@ -49,6 +49,15 @@ for (const file of Object.values(manifest.components).flatMap((c) => c.files))
     type: "application/octet-stream",
     sha256: file.sha256,
   };
+// Optional on-device verifier (upload this file to the same release).
+const verifier = JSON.parse(
+  await readFile(resolve("browser/verifier-manifest.json"), "utf8"),
+);
+remote["/models/" + verifier.path] = {
+  file: verifier.path,
+  type: "application/octet-stream",
+  sha256: verifier.sha256,
+};
 for (const file of [
   "manifest.json",
   "vocab.json",

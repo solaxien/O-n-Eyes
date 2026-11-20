@@ -3,8 +3,10 @@ import { getAsset } from "./cache.js";
 import { Tokenizer } from "./tokenizer.js";
 import { toHalf, noise, dpmStep } from "./numerics.js";
 import { colorEvidence, cvStressStudy, differenceMap, enhance, png } from "./vision.js";
-import { analyzePrompt, conditioningPrompt } from "./prompt.js";
+import { analyzePrompt, conditioningPrompt, QUALITY_NEGATIVE, QUALITY_SUFFIX } from "./prompt.js";
 import { chooseProfile, previewSteps } from "./resources.js";
+import { decode as decodeDetections, preprocess as detectorInput, verify } from "./verifier.js";
+
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.wasmPaths = new URL("./vendor/", import.meta.url).href;
 ort.env.logLevel = "warning";
@@ -29,6 +31,8 @@ const stage = (message, progress) =>
 const resident = new Map();
 let retain = false,
   negativeEmbedding = null,
+  negativeText = null,
+  detectorSession = null,
   dispatches = 0,
   observedStepMs;
 if (typeof GPUComputePassEncoder !== "undefined") {
@@ -88,6 +92,60 @@ function decodedPixels(decoded, size) {
   }
   return pixels;
 }
+async function verifyLocally(semantic, pixels, size) {
+  const begin = performance.now();
+  try {
+    const index = await (await fetch("/verifier-index.json")).json();
+    if (!detectorSession) {
+      let bytes;
+      try {
+        bytes = new Uint8Array(
+          await (await getAsset(index.path, { sha256: index.sha256 })).arrayBuffer(),
+        );
+      } catch {
+        return {
+          unavailable: true,
+          reason: "The verifier model is not in the offline cache. Use Prepare to download it.",
+          ms: performance.now() - begin,
+        };
+      }
+      detectorSession = await ort.InferenceSession.create(bytes, {
+        executionProviders: ["wasm"],
+        graphOptimizationLevel: "all",
+      });
+    }
+    const input = detectorInput(pixels, size, size, index.input_size),
+      feeds = {
+        [detectorSession.inputNames[0]]: new ort.Tensor("float32", input.data, [1, 3, input.size, input.size]),
+      },
+      results = await detectorSession.run(feeds),
+      output = results[detectorSession.outputNames[0]],
+      detections = decodeDetections(output.data, {
+        size: input.size,
+        ratio: input.ratio,
+        width: size,
+        height: size,
+      });
+    output.dispose();
+    for (const tensor of Object.values(feeds)) tensor.dispose();
+    const report = verify(semantic, detections, pixels, size, size);
+    if (!retain) {
+      await detectorSession.release();
+      detectorSession = null;
+    }
+    return { ...report, model: index.model, model_sha256: index.sha256, ms: performance.now() - begin };
+  } catch (error) {
+    if (detectorSession && !retain) {
+      await detectorSession.release().catch(() => {});
+      detectorSession = null;
+    }
+    return {
+      unavailable: true,
+      reason: "The on-device verifier failed: " + (error.message || String(error)),
+      ms: performance.now() - begin,
+    };
+  }
+}
 self.onmessage = async ({ data }) => {
   const started = performance.now(),
     times = {},
@@ -138,16 +196,27 @@ self.onmessage = async ({ data }) => {
     );
     if (data.structuredPrompt && semantic.needs_semantic_verification)
       conditioning = conditioningPrompt(semantic);
-    let ids;
-    try {
-      ids = tokenizer.encode(conditioning);
-    } catch (error) {
-      if (conditioning !== data.prompt) {
-        conditioning = data.prompt;
-        conditioningFallback = true;
+    let ids,
+      qualitySuffixApplied = false;
+    if (data.qualityHints)
+      try {
+        ids = tokenizer.encode(conditioning + QUALITY_SUFFIX);
+        conditioning += QUALITY_SUFFIX;
+        qualitySuffixApplied = true;
+      } catch {
+        ids = undefined; // Too long with the suffix; keep the user's wording.
+      }
+    if (!ids)
+      try {
         ids = tokenizer.encode(conditioning);
-      } else throw error;
-    }
+      } catch (error) {
+        if (conditioning !== data.prompt) {
+          conditioning = data.prompt;
+          conditioningFallback = true;
+          ids = tokenizer.encode(conditioning);
+        } else throw error;
+      }
+    const unconditionalText = data.qualityHints ? QUALITY_NEGATIVE : "";
     const plans = await (await getAsset("schedules.json")).json(),
       schedule = plans[profile.steps];
     processEvent("text", "active", "Encoding the prompt locally with CLIP.");
@@ -157,11 +226,14 @@ self.onmessage = async ({ data }) => {
     loads.text = performance.now() - tick;
     tick = performance.now();
     const negative =
-      negativeEmbedding ||
+      (negativeText === unconditionalText && negativeEmbedding) ||
       (await run(active, {
-        input_ids: new ort.Tensor("int32", tokenizer.encode(""), [1, 77]),
+        input_ids: new ort.Tensor("int32", tokenizer.encode(unconditionalText), [1, 77]),
       }));
-    if (retain) negativeEmbedding = negative;
+    if (retain) {
+      negativeEmbedding = negative;
+      negativeText = unconditionalText;
+    }
     const positive = await run(active, {
       input_ids: new ort.Tensor("int32", ids, [1, 77]),
     });
@@ -292,6 +364,24 @@ self.onmessage = async ({ data }) => {
       );
     times.cv_resize_encode = performance.now() - tick;
     processEvent("cv", "done", "Classical vision checks and output encoding completed.");
+    let verifier = null;
+    if (
+      data.verify &&
+      semantic.needs_semantic_verification &&
+      (!data.verifyProfiles || data.verifyProfiles.includes(profile.key))
+    ) {
+      processEvent("verify", "active", "Checking requested objects, counts, colours and layout on this device.");
+      stage("Checking the prompt on this device", 97);
+      verifier = await verifyLocally(semantic, cv.pixels, profile.size);
+      times.verify = verifier.ms;
+      processEvent(
+        "verify",
+        "done",
+        verifier.unavailable
+          ? verifier.reason
+          : `${verifier.summary.passed} passed, ${verifier.summary.failed} failed, ${verifier.summary.not_verifiable} not verifiable.`,
+      );
+    }
     const metadata = {
       execution: "visitor browser",
       inferenceRequests: 0,
@@ -306,6 +396,11 @@ self.onmessage = async ({ data }) => {
       prompt: data.prompt,
       conditioning_prompt: conditioning,
       conditioning_prompt_fallback: conditioningFallback,
+      quality_hints: {
+        enabled: Boolean(data.qualityHints),
+        negative_prompt: unconditionalText || null,
+        positive_suffix_applied: qualitySuffixApplied,
+      },
       attempt: data.attempt || 1,
       fallback_from: data.fallbackFrom || null,
       native_resolution: profile.size,
@@ -330,8 +425,11 @@ self.onmessage = async ({ data }) => {
         requested_objects: semantic.objects,
         requested_relations: semantic.relations,
         color_evidence,
-        verification: "No on-device object/relation verifier is bundled in this model release. Colour evidence is global only, so this plan is not proof of semantic correctness.",
+        verification: verifier && !verifier.unavailable
+          ? "Checked on this device by the compact verifier. It steers retries only; final benchmark accuracy must come from a separate offline evaluator."
+          : "No on-device verification ran for this image. Colour evidence is global only, so this plan is not proof of semantic correctness.",
       },
+      verifier,
       adapter_sha256: manifest.adapter_sha256,
       model_revision: manifest.model.revision,
       model_bytes: Object.values(manifest.components)

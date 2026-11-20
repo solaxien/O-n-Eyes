@@ -541,3 +541,33 @@ footer {
   width: auto;
   margin: 0;
 }
+
+.check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.check-list li {
+  padding-left: 1.4rem;
+  position: relative;
+  line-height: 1.4;
+}
+.check-list li.check::before {
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+}
+.check-list li.pass::before {
+  content: "\2713";
+  color: #6fd3a8;
+}
+.check-list li.fail::before {
+  content: "\2717";
+  color: #ff8a7a;
+}
+.check-list li.not_verifiable::before {
+  content: "?";
+  color: #9aa5a5;
+}

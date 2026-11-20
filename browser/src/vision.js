@@ -22,7 +22,7 @@ function qualityAssessment(metrics, artifactFraction) {
   };
 }
 
-function hsv(r, g, b) {
+export function hsv(r, g, b) {
   r /= 255;
   g /= 255;
   b /= 255;
@@ -38,7 +38,7 @@ function hsv(r, g, b) {
   return { h: hue < 0 ? hue + 360 : hue, s: high ? delta / high : 0, v: high };
 }
 
-function isColor(color, value) {
+export function isColor(color, value) {
   const { h, s, v } = value;
   switch (color) {
     case "red": return s >= 0.27 && v >= 0.15 && (h <= 18 || h >= 345);

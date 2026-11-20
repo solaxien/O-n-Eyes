@@ -1,3 +1,10 @@
+// Optional quality hints. The negative text replaces the empty unconditional
+// prompt that classifier-free guidance already evaluates, so it adds no
+// denoiser calls. Benchmarks pass the setting explicitly so baselines stay comparable.
+export const QUALITY_NEGATIVE =
+  "blurry, low quality, low resolution, distorted, deformed, disfigured, extra limbs, duplicate, watermark, text, jpeg artifacts";
+export const QUALITY_SUFFIX = ", high quality, detailed, sharp focus";
+
 // A small local prompt contract. It is used for planning and transparent UI
 // feedback only; it never claims that an image satisfies a clause unless an
 // on-device verifier has been installed and run.

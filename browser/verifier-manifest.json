@@ -1,0 +1,9 @@
+{
+  "path": "verifier-yolox-nano.onnx",
+  "sha256": "c789161ed43c8269fcd4e67c67eeeb4e80c622da2eb296a20bc6007bd18a0b7d",
+  "bytes": 3659407,
+  "input_size": 416,
+  "model": "YOLOX-Nano, COCO 80 classes, FP32 ONNX",
+  "license": "Apache-2.0",
+  "source": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.onnx"
+}

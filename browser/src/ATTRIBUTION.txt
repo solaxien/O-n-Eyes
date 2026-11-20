@@ -19,3 +19,6 @@ browser. Downloads only deliver static model and application files.
 This research build does not include a content safety classifier. The model
 use restrictions still apply. Pixel checks measure contrast, clipping, edges
 and isolated artifacts; they do not establish semantic correctness or safety.
+
+On-device verifier: YOLOX-Nano ONNX (Megvii-BaseDetection/YOLOX, release 0.1.1rc0),
+Apache License 2.0. https://github.com/Megvii-BaseDetection/YOLOX

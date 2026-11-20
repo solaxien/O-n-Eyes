@@ -1,0 +1,17 @@
+{
+  "checkpoint": "aad3e0e8ba61b7cb9f64869dc4e586f8ad9d3665",
+  "train_manifest_sha256": "66f5a622de8502b766aedcf073d3e770c6e5d08e9856392d4a1f89dcd59297a2",
+  "resolution": 384,
+  "rank": 4,
+  "seed": 38,
+  "learning_rate": 0.0001,
+  "accumulation": 4,
+  "training_pairs": 1000,
+  "optimizer_updates": 250,
+  "trainable_parameters": 431616,
+  "first_25_mean_loss": 0.1971227692067623,
+  "last_25_mean_loss": 0.15383694014512003,
+  "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "seconds_this_invocation": 225.22799909999594,
+  "adapter_sha256": "dcffb4476adcf795689bd710679eaaaf96d19bf5a7ec7f23bf0a46e2cd295c49"
+}

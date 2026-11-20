@@ -112,5 +112,22 @@ export async function prepareModels(progress, signal) {
     "tokenizer-tests.json",
   ])
     await getAsset(path, { download: true, signal });
+  // The compact verifier is optional. Generation still works without it; the
+  // app then reports that prompt checks were not run.
+  try {
+    const verifier = await fetch("/verifier-index.json").then((r) => r.json());
+    progress({ file: verifier.path, bytes: total, total });
+    await getAsset(verifier.path, {
+      download: true,
+      signal,
+      sha256: verifier.sha256,
+      bytes: verifier.bytes,
+    });
+    manifest.verifier_ready = true;
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    manifest.verifier_ready = false;
+    console.warn("On-device verifier unavailable:", error);
+  }
   return manifest;
 }

@@ -58,6 +58,26 @@ def summarise(directory):
         "profiles_used": dict(Counter(record["metadata"]["profile"]["key"] for record in records)),
         "steps_used": dict(Counter(record["metadata"]["steps"] for record in records)),
         "fallbacks": sum(bool(record["metadata"].get("recovery", {}).get("used")) for record in records),
+        "verify": experiment.get("verify", False),
+        "quality_hints": experiment.get("quality_hints", False),
+        "candidates_per_image": median([len(record["metadata"].get("selection", {}).get("candidates", [None])) for record in records]),
+        "unet_calls_total": sum(
+            sum(c.get("unet_calls", record["metadata"]["unet_calls"]) for c in record["metadata"].get("selection", {}).get("candidates", []))
+            or record["metadata"]["unet_calls"]
+            for record in records
+        ),
+        "local_verifier_self_check": {
+            "note": "Computed by the same verifier that steered retries. Not a final accuracy score; use p3.benchmark score.",
+            "images_all_checks_passed": sum(
+                1 for record in records
+                if (record["metadata"].get("verifier") or {}).get("summary", {}).get("checked")
+                and record["metadata"]["verifier"]["summary"]["failed"] == 0
+            ),
+            "images_checked": sum(
+                1 for record in records
+                if (record["metadata"].get("verifier") or {}).get("summary", {}).get("checked")
+            ),
+        },
         "latency_ms": {
             "min": min(latency),
             "p50": median(latency),
@@ -87,9 +107,9 @@ def main():
     runs = [summarise(path.resolve()) for path in args.run]
     manifests = {run["provenance"]["manifest_sha256"] for run in runs}
     bundles = {run["provenance"]["cached_model_manifest_sha256"] for run in runs}
-    prompts = {run["structured_prompt"] for run in runs}
+    prompts = {(run["structured_prompt"], run["quality_hints"]) for run in runs}
     if len(manifests) != 1 or len(bundles) != 1 or len(prompts) != 1:
-        raise ValueError("Runs differ in prompt manifest, cached model bundle, or prompt-conditioning policy")
+        raise ValueError("Runs differ in prompt manifest, cached model bundle, or prompt-conditioning/quality-hint policy")
     baseline = next((run for run in runs if run["requested_mode"] == "baseline"), None)
     if baseline:
         for run in runs:

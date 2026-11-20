@@ -67,6 +67,15 @@ A product photograph of a red apple beside a blue cup on a white table.</textare
             spatial relations for the local text encoder</label
           >
           <label class="reuse"
+            ><input id="verify-prompt" type="checkbox" checked /> Check objects, counts,
+            colours and layout on this device; Balanced retries once and Slow detail
+            keeps the best of up to three</label
+          >
+          <label class="reuse"
+            ><input id="quality-hints" type="checkbox" checked /> Add quality hints
+            (negative prompt) at no extra compute cost</label
+          >
+          <label class="reuse"
             ><input id="cv-study" type="checkbox" /> Create CV ablations to inspect the
             post-processing stages</label
           >
@@ -154,6 +163,14 @@ A product photograph of a red apple beside a blue cup on a white table.</textare
             <div id="quality-summary" class="metric-grid compact"></div>
             <h3>Prompt-consistency evidence</h3>
             <div id="semantic-evidence" class="evidence"></div>
+            <div id="verifier-section" hidden>
+              <h3>On-device prompt checks</h3>
+              <ul id="verifier-checks" class="check-list"></ul>
+            </div>
+            <div id="candidate-section" hidden>
+              <h3>Candidates tried on this device</h3>
+              <ol id="candidate-timeline" class="timeline"></ol>
+            </div>
           </section>
           <section id="cv-study-results" class="insights" hidden aria-labelledby="cv-title">
             <div class="section-heading">

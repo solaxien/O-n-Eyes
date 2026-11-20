@@ -1,6 +1,10 @@
 import { getAsset, prepareModels, MODEL_CACHE } from "./cache.js";
 import { chooseProfile, nextFallback } from "./resources.js";
 import { analyzePrompt, semanticSummary } from "./prompt.js";
+import { candidateScore, candidateSeed, pickBest, selectionPolicy, shouldContinue } from "./selection.js";
+// Profiles where the compact verifier runs; it then steers retries or picks
+// the best candidate. Preview and Eco keep the single-image fast path.
+const VERIFY_PROFILES = ["balanced", "quality"];
 const $ = (id) => document.getElementById(id),
   state = {
     ready: false,
@@ -447,7 +451,70 @@ function renderInsights(result) {
     );
   const caveat = appendText(evidence, plan.verification);
   caveat.className = "muted";
+  renderVerifier(metadata);
+  renderCandidates(metadata);
   renderCvStudy(result);
+}
+
+const STATUS_TEXT = { pass: "Passed", fail: "Failed", not_verifiable: "Not verifiable here" };
+function renderVerifier(metadata) {
+  const list = $("verifier-checks"),
+    verifier = metadata.verifier;
+  list.replaceChildren();
+  $("verifier-section").hidden = false;
+  if (!verifier) {
+    appendText(
+      list,
+      VERIFY_PROFILES.includes(metadata.profile.key)
+        ? "Nothing in this prompt could be checked on this device."
+        : "Prompt checks run in Balanced and Slow detail modes. This mode keeps the single-image fast path.",
+      "li",
+    ).className = "muted";
+    return;
+  }
+  if (verifier.unavailable) {
+    appendText(list, verifier.reason, "li").className = "muted";
+    return;
+  }
+  const groups = [
+    ["Object", verifier.object_checks],
+    ["Count", verifier.count_checks],
+    ["Colour", verifier.color_checks],
+    ["Layout", verifier.relation_checks],
+  ];
+  for (const [kind, checks] of groups)
+    for (const check of checks) {
+      const detail =
+        check.found !== undefined
+          ? ` (found ${check.found})`
+          : check.reason
+            ? ` (${check.reason})`
+            : "";
+      const item = appendText(list, `${kind}: ${check.label}. ${STATUS_TEXT[check.status]}${detail}`, "li");
+      item.className = "check " + check.status;
+    }
+  appendText(
+    list,
+    `Checked in ${formatMs(verifier.ms)} by ${verifier.verifier_scope}. These checks steer retries; they are not the final benchmark score.`,
+    "li",
+  ).className = "muted";
+}
+function renderCandidates(metadata) {
+  const list = $("candidate-timeline"),
+    selection = metadata.selection;
+  list.replaceChildren();
+  if (!selection || selection.candidates.length < 2) {
+    $("candidate-section").hidden = true;
+    return;
+  }
+  $("candidate-section").hidden = false;
+  for (const candidate of selection.candidates) {
+    const item = document.createElement("li");
+    item.className = candidate.selected ? "done" : "";
+    item.textContent = `Seed ${candidate.seed}, ${candidate.profile}, ${formatMs(candidate.elapsed_ms)}: ${candidate.verifier}${candidate.selected ? ". Selected" : ""}`;
+    list.append(item);
+  }
+  appendText(list, `${selection.stop_reason}${selection.best_effort ? " Best effort result." : ""}`, "li").className = "muted";
 }
 
 function showResult(result, visibleMs) {
@@ -478,7 +545,9 @@ function showResult(result, visibleMs) {
   const recovery = result.metadata.recovery;
   $("stage").textContent = recovery?.used
     ? `Generated locally after fallback to ${result.metadata.profile.key}. ${recovery.failures.length} resource-limited attempt${recovery.failures.length === 1 ? "" : "s"} recovered.`
-    : result.metadata.cv.usable
+    : result.metadata.selection?.candidates.length > 1
+      ? `Generated locally. Best of ${result.metadata.selection.candidates.length} on-device candidates shown.`
+      : result.metadata.cv.usable
       ? "Generated locally. Pixel quality checks passed."
       : "Generated locally, but pixel checks flagged this image. Raw output is retained.";
   const plan = result.metadata.semantic_plan,
@@ -596,6 +665,9 @@ async function generate({
   cvStudy = false,
   processPreview = $("process-preview").checked,
   present = true,
+  verify = $("verify-prompt").checked,
+  qualityHints = $("quality-hints").checked,
+  budgetMs,
 }) {
   if (!state.ready || state.busy)
     throw Error(
@@ -629,27 +701,28 @@ async function generate({
     activeKeepLoaded = keepLoaded,
     worker = state.worker;
   let success = false;
-  try {
+  // One locally generated candidate, with the existing resource fallback.
+  async function candidateRun(candidateSeedValue, index) {
     for (;;) {
       worker ||= new Worker("/worker.js", { type: "module" });
       state.worker = worker;
       try {
         const data = await runAttempt(worker, {
           prompt,
-          seed,
+          seed: candidateSeedValue,
           mode: attemptMode,
           omit,
           keepLoaded: activeKeepLoaded,
           structuredPrompt,
-          cvStudy,
-          processPreview,
+          cvStudy: cvStudy && index === 0,
+          processPreview: processPreview && index === 0,
           attempt,
           fallbackFrom,
+          verify,
+          verifyProfiles: VERIFY_PROFILES,
+          qualityHints,
         });
-        data.metadata.recovery = { used: failures.length > 0, failures };
-        data.metadata.submit_to_result_ms = performance.now() - started;
-        if (present) await revealResult(data);
-        success = true;
+        data.metadata.recovery = { used: failures.length > 0, failures: [...failures] };
         return data;
       } catch (error) {
         const failed = error.profile?.key || attemptMode,
@@ -667,6 +740,59 @@ async function generate({
         $("generation-progress").value = 0;
       }
     }
+  }
+  try {
+    const candidates = [],
+      timeline = [];
+    let policy = null,
+      decision = null;
+    for (let index = 0; ; index++) {
+      const candidateStarted = performance.now(),
+        value = candidateSeed(seed, index);
+      if (index > 0)
+        $("stage").textContent = `${decision.reason} Candidate ${index + 1}, seed ${value}…`;
+      const data = await candidateRun(value, index);
+      // Later candidates reuse the profile that actually ran, so Auto cannot
+      // drift between candidates.
+      attemptMode = data.metadata.profile.key;
+      policy ||= selectionPolicy(data.metadata.profile.key, { verifyRequested: verify, budgetMs });
+      candidates.push(data);
+      const summary = data.metadata.verifier?.summary;
+      timeline.push({
+        index,
+        seed: value,
+        profile: data.metadata.profile.key,
+        unet_calls: data.metadata.unet_calls,
+        elapsed_ms: Math.round(performance.now() - candidateStarted),
+        verifier: data.metadata.verifier
+          ? data.metadata.verifier.unavailable
+            ? "unavailable"
+            : `${summary.passed} passed, ${summary.failed} failed, ${summary.not_verifiable} not verifiable`
+          : "not run in this mode",
+        score: Number(candidateScore(data.metadata).toFixed(3)),
+      });
+      decision = shouldContinue(
+        policy,
+        candidates.map((c) => c.metadata),
+        performance.now() - started,
+      );
+      if (!decision.next) break;
+    }
+    const chosen = pickBest(candidates.map((c) => c.metadata)),
+      data = candidates[chosen];
+    timeline[chosen].selected = true;
+    data.metadata.selection = {
+      policy,
+      candidates: timeline,
+      selected_index: chosen,
+      stop_reason: decision.reason,
+      best_effort: /budget/i.test(decision.reason),
+      note: "Candidate selection used the on-device verifier. Report final accuracy from a separate offline evaluator.",
+    };
+    data.metadata.submit_to_result_ms = performance.now() - started;
+    if (present) await revealResult(data);
+    success = true;
+    return data;
   } catch (error) {
     fail(error.message);
     throw error;
@@ -721,6 +847,7 @@ $("compare").onclick = async () => {
       cvStudy: false,
       processPreview: false,
       present: false,
+      verify: false,
     });
     setComparisonStatus("Reference complete. Running the selected optimized profile…");
     const optimized = await generate({
@@ -732,6 +859,7 @@ $("compare").onclick = async () => {
       cvStudy: false,
       processPreview: false,
       present: false,
+      verify: false,
     });
     await revealResult(optimized);
     showComparison(reference, optimized);

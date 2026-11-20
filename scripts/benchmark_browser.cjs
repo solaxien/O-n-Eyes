@@ -36,7 +36,10 @@ for (const sample of samples)
   if (!/^[a-z0-9_-]+$/i.test(sample.id)) throw Error("Invalid sample filename");
 const mode = args.mode || "eco",
   keepLoaded = Boolean(args["keep-loaded"]),
-  structuredPrompt = args["structured-prompt"] !== "false";
+  structuredPrompt = args["structured-prompt"] !== "false",
+  // Explicit so benchmark runs never inherit UI checkbox defaults.
+  verifyPrompt = args.verify === "true",
+  qualityHints = args["quality-hints"] === "true";
 let ws,
   monitor,
   counter = 0,
@@ -194,6 +197,8 @@ async function waitReady() {
     mode,
     keepLoaded,
     structured_prompt: structuredPrompt,
+    verify: verifyPrompt,
+    quality_hints: qualityHints,
     offline: Boolean(args.offline),
     manifest: samples,
     manifest_sha256: hash(fs.readFileSync(args.manifest)),
@@ -279,6 +284,9 @@ async function waitReady() {
       keepLoaded,
       structuredPrompt,
       cvStudy: Boolean(args["cv-study"]),
+      verify: verifyPrompt,
+      qualityHints,
+      processPreview: false,
     };
     const result = await evaluate(
       `(async()=>{const r=await window.__p3.generate(${JSON.stringify(config)});const b64=b=>new Promise((ok,no)=>{const f=new FileReader();f.onload=()=>ok(f.result.split(',')[1]);f.onerror=no;f.readAsDataURL(b);});return {metadata:r.metadata,raw:await b64(r.raw),enhanced:await b64(r.enhanced),variants:Object.fromEntries(await Promise.all(Object.entries(r.variants||{}).map(async([key,blob])=>[key,await b64(blob)]))),online:navigator.onLine};})()`,
