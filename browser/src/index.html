@@ -19,7 +19,7 @@
         Generate images locally with compact diffusion. Prompts and generation
         stay in this browser.
       </p>
-      <section class="panel" aria-labelledby="setup-title">
+      <section id="setup-panel" class="panel" aria-labelledby="setup-title">
         <h2 id="setup-title">Prepare your device</h2>
         <p id="capability" role="status">Checking browser capabilities…</p>
         <button id="prepare" disabled>Download models for offline use</button
@@ -57,15 +57,47 @@ A product photograph of a red apple beside a blue cup on a white table.</textare
                 required
             /></label>
           </div>
+          <p id="profile-preview" class="plan-preview" aria-live="polite"></p>
           <label class="reuse"
             ><input id="keep-loaded" type="checkbox" /> Keep models loaded for
             faster repeat images</label
           >
+          <label class="reuse"
+            ><input id="structured-prompt" type="checkbox" checked /> Clarify objects and
+            spatial relations for the local text encoder</label
+          >
+          <label class="reuse"
+            ><input id="cv-study" type="checkbox" /> Create CV ablations to inspect the
+            post-processing stages</label
+          >
+          <label class="reuse"
+            ><input id="process-preview" type="checkbox" /> Show real diffusion checkpoints
+            during this generation</label
+          >
           <p class="muted">
-            Uses more memory. Models are released after two idle minutes; leave
-            this off on constrained devices.
+            Kept models use more memory and are released after two idle minutes.
+            Prompt clarification stays on this device and falls back to your original
+            wording if it would exceed the model token limit. Process checkpoints add
+            local decoder work and are not part of the normal fast path.
           </p>
           <button id="generate" disabled>Generate on this device</button>
+          <section class="optimization-lab" aria-labelledby="lab-title">
+            <div>
+              <span class="eyebrow">Experiment</span>
+              <h2 id="lab-title">Optimization lab</h2>
+              <p class="muted">
+                Generate the same prompt and seed twice: a local 20-step sampling
+                reference, then the selected optimized profile. This is a local
+                cost comparison, not proof of semantic correctness.
+              </p>
+            </div>
+            <button id="compare" type="button" disabled>
+              Compare reference and selected profile
+            </button>
+            <p id="comparison-status" class="muted" role="status">
+              Prepare the models to enable a matched comparison.
+            </p>
+          </section>
           <p id="stage" role="status">Prepare the models to begin.</p>
           <progress
             id="generation-progress"
@@ -74,6 +106,14 @@ A product photograph of a red apple beside a blue cup on a white table.</textare
             hidden
           ></progress>
           <p id="error" role="alert" hidden></p>
+          <p id="prompt-plan" class="muted" hidden></p>
+          <section id="process-visualizer" class="process-visualizer" hidden aria-labelledby="process-title">
+            <span class="eyebrow">Live local pipeline</span>
+            <h2 id="process-title">Generation process</h2>
+            <p id="process-note" class="muted"></p>
+            <ol id="process-timeline" class="timeline"></ol>
+            <div id="process-previews" class="process-previews"></div>
+          </section>
           <p class="muted">
             Poco F6 pilot: six-step repeat images took 7.55–7.93 s with models
             kept loaded; the first took 15.82 s. Slow detail took 66–71 s.
@@ -88,6 +128,8 @@ A product photograph of a red apple beside a blue cup on a white table.</textare
               <button type="button" data-image="raw">Raw</button
               ><button type="button" data-image="enhanced" aria-pressed="true">
                 Enhanced
+              </button><button type="button" data-image="difference" title="Amplified pixel difference between raw and enhanced">
+                Difference
               </button>
             </div>
           </div>
@@ -97,12 +139,58 @@ A product photograph of a red apple beside a blue cup on a white table.</textare
           </div>
           <p id="timing"></p>
           <a id="save" hidden download="on-device.png">Download image</a>
+          <section id="run-insights" class="insights" hidden aria-labelledby="insights-title">
+            <div class="section-heading">
+              <div>
+                <span class="eyebrow">Local run report</span>
+                <h2 id="insights-title">What this run used</h2>
+              </div>
+              <span id="quality-state" class="status-pill"></span>
+            </div>
+            <div id="run-summary" class="metric-grid"></div>
+            <h3>Optimizations active in this run</h3>
+            <ul id="optimization-stack" class="stack-list"></ul>
+            <h3>Classical vision checks</h3>
+            <div id="quality-summary" class="metric-grid compact"></div>
+            <h3>Prompt-consistency evidence</h3>
+            <div id="semantic-evidence" class="evidence"></div>
+          </section>
+          <section id="cv-study-results" class="insights" hidden aria-labelledby="cv-title">
+            <div class="section-heading">
+              <div>
+                <span class="eyebrow">Ablation</span>
+                <h2 id="cv-title">Classical-vision variants</h2>
+              </div>
+            </div>
+            <p class="muted">Each image omits one visible correction stage from the same native decode. Safety checks continue to protect every generated output.</p>
+            <div id="cv-variants" class="variant-grid"></div>
+            <div id="cv-stress" class="stress-study" hidden>
+              <h3>Controlled CV stress test</h3>
+              <p class="muted">
+                Disposable copies of this decode receive a known defect so each
+                conditional stage can be inspected visibly. These images are not
+                substituted for the generated output.
+              </p>
+              <div id="cv-stress-cards" class="stress-grid"></div>
+            </div>
+          </section>
           <details id="details" hidden>
             <summary>Execution and quality details</summary>
             <pre id="metadata"></pre>
           </details>
         </section>
       </div>
+      <section id="comparison" class="panel" hidden aria-labelledby="comparison-title">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Matched experiment</span>
+            <h2 id="comparison-title">Reference versus optimized generation</h2>
+          </div>
+          <span class="badge">Same prompt · same seed</span>
+        </div>
+        <p id="comparison-note" class="muted"></p>
+        <div id="comparison-grid" class="comparison-grid"></div>
+      </section>
       <footer>
         BK-SDM-Tiny with the T38 trained adapter · FP16 · DPM-Solver++ · TAESD ·
         local classical vision.<br /><a

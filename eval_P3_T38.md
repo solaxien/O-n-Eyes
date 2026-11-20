@@ -2,6 +2,8 @@
 
 # P3 Evaluation T38
 
+> **Historical v3 evaluation:** this table predates the current prompt-aware planner and automatic local fallback. It must be regenerated on Android before it is used to evaluate the current source.
+
 **O(n) Eyes**
 
 ## On-device browser pipeline

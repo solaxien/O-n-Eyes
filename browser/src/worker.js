@@ -2,8 +2,9 @@ import * as ort from "./vendor/ort.webgpu.min.mjs?v=1.31.1";
 import { getAsset } from "./cache.js";
 import { Tokenizer } from "./tokenizer.js";
 import { toHalf, noise, dpmStep } from "./numerics.js";
-import { enhance, png } from "./vision.js";
-import { chooseProfile } from "./resources.js";
+import { colorEvidence, cvStressStudy, differenceMap, enhance, png } from "./vision.js";
+import { analyzePrompt, conditioningPrompt } from "./prompt.js";
+import { chooseProfile, previewSteps } from "./resources.js";
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.wasmPaths = new URL("./vendor/", import.meta.url).href;
 ort.env.logLevel = "warning";
@@ -74,11 +75,34 @@ async function run(model, feeds) {
     for (const tensor of Object.values(feeds)) tensor.dispose();
   }
 }
+function decodedPixels(decoded, size) {
+  const pixels = new Uint8ClampedArray(size * size * 4),
+    plane = size * size;
+  for (let i = 0; i < plane; i++) {
+    for (let c = 0; c < 3; c++)
+      pixels[i * 4 + c] = Math.max(
+        0,
+        Math.min(255, (decoded[c * plane + i] + 1) * 127.5),
+      );
+    pixels[i * 4 + 3] = 255;
+  }
+  return pixels;
+}
 self.onmessage = async ({ data }) => {
   const started = performance.now(),
     times = {},
     loads = {};
-  let active;
+  let active,
+    profile,
+    semantic,
+    conditioning = data.prompt,
+    conditioningFallback = false;
+  const visualizeProcess = Boolean(data.processPreview),
+    checkpoints = [],
+    processEvent = (stageName, status, detail) => {
+      if (visualizeProcess)
+        postMessage({ type: "process", stage: stageName, status, detail });
+    };
   retain = Boolean(data.keepLoaded);
   dispatches = 0;
   const warm = resident.size === 3;
@@ -92,20 +116,41 @@ self.onmessage = async ({ data }) => {
       throw Error(
         "A WebGPU adapter with FP16 support is required. No server fallback is used.",
       );
-    const profile = chooseProfile(data.mode, {
+    semantic = analyzePrompt(data.prompt);
+    processEvent("prompt", "active", "Parsing the prompt and selecting a local resource profile.");
+    profile = chooseProfile(data.mode, {
         memoryGiB: navigator.deviceMemory || 4,
+        hardwareConcurrency: navigator.hardwareConcurrency || 4,
         stepMs: observedStepMs,
+        complexity: semantic.complexity,
         keepLoaded: retain,
-      }),
-      reason = profile.reason;
+        budgetMs: data.budgetMs,
+      });
+    processEvent(
+      "prompt",
+      "done",
+      `${profile.label}: ${profile.size} px and ${profile.steps} diffusion steps.`,
+    );
     const manifest = await (await getAsset("manifest.json")).json();
     const tokenizer = new Tokenizer(
       await (await getAsset("vocab.json")).json(),
       await (await getAsset("merges.txt")).text(),
     );
-    const ids = tokenizer.encode(data.prompt);
+    if (data.structuredPrompt && semantic.needs_semantic_verification)
+      conditioning = conditioningPrompt(semantic);
+    let ids;
+    try {
+      ids = tokenizer.encode(conditioning);
+    } catch (error) {
+      if (conditioning !== data.prompt) {
+        conditioning = data.prompt;
+        conditioningFallback = true;
+        ids = tokenizer.encode(conditioning);
+      } else throw error;
+    }
     const plans = await (await getAsset("schedules.json")).json(),
       schedule = plans[profile.steps];
+    processEvent("text", "active", "Encoding the prompt locally with CLIP.");
     stage("Loading the local CPU text encoder", 4);
     let tick = performance.now();
     active = await session(manifest.components.text, "wasm");
@@ -122,6 +167,8 @@ self.onmessage = async ({ data }) => {
     });
     times.encode = performance.now() - tick;
     await unload();
+    processEvent("text", "done", "Text embedding is ready; the encoder session was released.");
+    processEvent("denoise", "active", `Starting ${profile.steps} local diffusion steps.`);
     stage("Loading the adapted denoiser on this device", 12);
     tick = performance.now();
     active = await session(manifest.components.unet);
@@ -132,7 +179,8 @@ self.onmessage = async ({ data }) => {
       previous = null;
     const contexts = [toHalf(negative), toHalf(positive)];
     tick = performance.now();
-    const steps = [];
+    const steps = [],
+      checkpointSteps = visualizeProcess ? new Set(previewSteps(profile.steps)) : new Set();
     for (let step = 0; step < profile.steps; step++) {
       stage(
         `Local diffusion · step ${step + 1} of ${profile.steps}`,
@@ -173,41 +221,77 @@ self.onmessage = async ({ data }) => {
           "The local denoiser produced non-finite values. Try Low memory mode.",
         );
       steps.push(performance.now() - stepStart);
+      const completed = step + 1;
+      if (checkpointSteps.has(completed)) {
+        checkpoints.push({ step: completed, latent: latent.slice() });
+        processEvent(
+          "denoise",
+          "active",
+          `Completed step ${completed} of ${profile.steps}; captured a real latent checkpoint.`,
+        );
+      }
     }
     times.denoise = performance.now() - tick;
     observedStepMs =
       steps.slice(1).reduce((s, x) => s + x, 0) / Math.max(1, steps.length - 1);
     await unload();
+    processEvent("denoise", "done", "Denoising completed; the large denoiser session was released.");
+    processEvent("decode", "active", "Decoding the final latent locally with TAESD.");
     stage("Decoding the image locally", 83);
     tick = performance.now();
     active = await session(manifest.components.decoder);
     loads.decoder = performance.now() - tick;
+    if (checkpoints.length) {
+      const previewTick = performance.now();
+      processEvent("preview", "active", "Decoding saved checkpoints after releasing the denoiser.");
+      for (const checkpoint of checkpoints) {
+        const previewDecoded = await run(active, {
+            latent: new ort.Tensor("float16", toHalf(checkpoint.latent), shape),
+          }),
+          preview = await png(
+            decodedPixels(previewDecoded, profile.size),
+            profile.size,
+            profile.size,
+            192,
+          );
+        postMessage({
+          type: "process-preview",
+          step: checkpoint.step,
+          steps: profile.steps,
+          blob: preview,
+        });
+      }
+      times.process_preview_decode = performance.now() - previewTick;
+      processEvent("preview", "done", `${checkpoints.length} actual latent checkpoints decoded.`);
+    }
     tick = performance.now();
     const decoded = await run(active, {
       latent: new ort.Tensor("float16", toHalf(latent), shape),
     });
     times.decode = performance.now() - tick;
     await unload();
+    processEvent("decode", "done", "Final latent decoded to native pixels; decoder session was released.");
     if (!decoded.every(Number.isFinite))
       throw Error(
         "The local decoder produced invalid pixels. Try Low memory mode.",
       );
-    const pixels = new Uint8ClampedArray(profile.size * profile.size * 4),
-      plane = profile.size * profile.size;
-    for (let i = 0; i < plane; i++) {
-      for (let c = 0; c < 3; c++)
-        pixels[i * 4 + c] = Math.max(
-          0,
-          Math.min(255, (decoded[c * plane + i] + 1) * 127.5),
-        );
-      pixels[i * 4 + 3] = 255;
-    }
+    const pixels = decodedPixels(decoded, profile.size);
+    processEvent("cv", "active", "Running local artifact, colour, edge, and pixel-quality checks.");
     stage("Local colour, edge and artifact checks", 94);
     tick = performance.now();
-    const cv = enhance(pixels, profile.size, profile.size, data.omit || []);
+    const color_evidence = colorEvidence(pixels, profile.size, profile.size, semantic),
+      cv = enhance(pixels, profile.size, profile.size, data.omit || []),
+      enhancementDifference = differenceMap(pixels, cv.pixels);
     const raw = await png(pixels, profile.size, profile.size),
-      enhanced = await png(cv.pixels, profile.size, profile.size);
+      enhanced = await png(cv.pixels, profile.size, profile.size),
+      difference = await png(
+        enhancementDifference.pixels,
+        profile.size,
+        profile.size,
+        profile.size,
+      );
     times.cv_resize_encode = performance.now() - tick;
+    processEvent("cv", "done", "Classical vision checks and output encoding completed.");
     const metadata = {
       execution: "visitor browser",
       inferenceRequests: 0,
@@ -220,12 +304,34 @@ self.onmessage = async ({ data }) => {
       gpu_dispatches: dispatches,
       seed: data.seed,
       prompt: data.prompt,
+      conditioning_prompt: conditioning,
+      conditioning_prompt_fallback: conditioningFallback,
+      attempt: data.attempt || 1,
+      fallback_from: data.fallbackFrom || null,
       native_resolution: profile.size,
       display_resolution: 512,
       steps: profile.steps,
       unet_calls: profile.steps * 2,
       guidance: manifest.guidance,
-      profile_reason: reason,
+      profile_reason: profile.reason,
+      profile: {
+        key: profile.key,
+        requested_mode: profile.requested_mode,
+        fallback_chain: profile.fallback_chain,
+        predicted_ms: profile.predicted_ms,
+      },
+      device_budget: {
+        memory_class_gib: navigator.deviceMemory || null,
+        logical_cores: navigator.hardwareConcurrency || null,
+        target_ms: profile.targetMs,
+      },
+      semantic_plan: {
+        complexity: semantic.complexity,
+        requested_objects: semantic.objects,
+        requested_relations: semantic.relations,
+        color_evidence,
+        verification: "No on-device object/relation verifier is bundled in this model release. Colour evidence is global only, so this plan is not proof of semantic correctness.",
+      },
       adapter_sha256: manifest.adapter_sha256,
       model_revision: manifest.model.revision,
       model_bytes: Object.values(manifest.components)
@@ -238,12 +344,27 @@ self.onmessage = async ({ data }) => {
       initial_download_included: false,
       models_retained: retain,
       warm_models: warm,
+      process_visualizer: {
+        enabled: visualizeProcess,
+        checkpoints: checkpoints.map((checkpoint) => checkpoint.step),
+        note: visualizeProcess
+          ? "Real latent checkpoints were captured during diffusion and decoded only after the denoiser was released."
+          : "Disabled for the normal low-overhead generation path.",
+      },
       cv: {
         usable: cv.usable,
         applied: cv.applied,
         before: cv.before,
         after: cv.after,
         artifact_fraction: cv.artifact_fraction,
+        quality: cv.quality,
+        enhancement_difference: {
+          changed_pixels: enhancementDifference.changed_pixels,
+          changed_fraction: enhancementDifference.changed_fraction,
+          mean_absolute_delta: enhancementDifference.mean_absolute_delta,
+          max_absolute_delta: enhancementDifference.max_absolute_delta,
+          caveat: "Amplified diagnostic map of real raw-to-enhanced changes; it is not an image-generation output.",
+        },
       },
       memory_note:
         "Browser deviceMemory is a coarse device class, not available GPU memory. Process memory is measured separately through ADB; this page cannot measure total GPU allocations.",
@@ -251,11 +372,18 @@ self.onmessage = async ({ data }) => {
     const variants = {};
     if (data.cvStudy) {
       metadata.cv_study = {};
-      for (const component of ["repair", "edges", "color", "gate"]) {
+      for (const component of ["repair", "edges", "color"]) {
         const begin = performance.now(),
-          variant = enhance(pixels, profile.size, profile.size, [component]);
+          variant = enhance(pixels, profile.size, profile.size, [component]),
+          difference = differenceMap(cv.pixels, variant.pixels);
         variants["omit-" + component] = await png(
           variant.pixels,
+          profile.size,
+          profile.size,
+        );
+        variants["omit-" + component + "-difference"] = await png(
+          difference.pixels,
+          profile.size,
           profile.size,
           profile.size,
         );
@@ -265,14 +393,49 @@ self.onmessage = async ({ data }) => {
           before: variant.before,
           after: variant.after,
           usable: variant.usable,
+          difference: {
+            changed_pixels: difference.changed_pixels,
+            changed_fraction: difference.changed_fraction,
+            mean_absolute_delta: difference.mean_absolute_delta,
+            max_absolute_delta: difference.max_absolute_delta,
+          },
         };
       }
+      const stress = cvStressStudy(pixels, profile.size, profile.size);
+      metadata.cv_stress = {
+        scope: "Controlled diagnostic copies only; these defects are not added to the generated output.",
+        speckle: {
+          injected_pixels: stress.speckle.injected_pixels,
+          corrected_pixels: Math.round(stress.speckle.corrected_pixels),
+        },
+        color: { cast: stress.color.cast },
+      };
+      for (const name of ["speckle", "color"]) {
+        const item = stress[name];
+        variants[`stress-${name}-input`] = await png(
+          item.input,
+          profile.size,
+          profile.size,
+        );
+        if (item.output)
+          variants[`stress-${name}-output`] = await png(
+            item.output,
+            profile.size,
+            profile.size,
+          );
+      }
     }
-    postMessage({ type: "result", raw, enhanced, metadata, variants });
+    postMessage({ type: "result", raw, enhanced, difference, metadata, variants });
   } catch (error) {
+    const message = error.message || String(error),
+      resourceFailure = /memory|non-finite|invalid pixels|exceeded|worker stopped|webgpu.*lost/i.test(message);
     postMessage({
       type: "error",
-      message: error.message || String(error),
+      message,
+      code: resourceFailure ? "resource" : "generation",
+      profile: profile
+        ? { key: profile.key, fallback_chain: profile.fallback_chain }
+        : null,
       elapsed_ms: performance.now() - started,
     });
   } finally {

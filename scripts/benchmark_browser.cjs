@@ -35,7 +35,8 @@ const samples = fs
 for (const sample of samples)
   if (!/^[a-z0-9_-]+$/i.test(sample.id)) throw Error("Invalid sample filename");
 const mode = args.mode || "eco",
-  keepLoaded = Boolean(args["keep-loaded"]);
+  keepLoaded = Boolean(args["keep-loaded"]),
+  structuredPrompt = args["structured-prompt"] !== "false";
 let ws,
   monitor,
   counter = 0,
@@ -157,13 +158,14 @@ async function waitReady() {
     shellCaches:(await caches.keys()).filter(x=>x.startsWith('p3-device-shell-')),
     modelIndex:await(await caches.match('/model-index.json')).json(),
     model:await(await caches.match('/models/manifest.json')).json(),
-    source:Object.fromEntries(await Promise.all(['app.js','worker.js','numerics.js','tokenizer.js','vision.js','resources.js','cache.js'].map(async file=>[file,[...new Uint8Array(await crypto.subtle.digest('SHA-256',await(await caches.match('/'+file)).arrayBuffer()))].map(x=>x.toString(16).padStart(2,'0')).join('')])))}))()`);
+    source:Object.fromEntries(await Promise.all(['app.js','worker.js','numerics.js','tokenizer.js','prompt.js','vision.js','resources.js','cache.js'].map(async file=>[file,[...new Uint8Array(await crypto.subtle.digest('SHA-256',await(await caches.match('/'+file)).arrayBuffer()))].map(x=>x.toString(16).padStart(2,'0')).join('')])))}))()`);
   const source = {};
   for (const file of [
     "app.js",
     "worker.js",
     "numerics.js",
     "tokenizer.js",
+    "prompt.js",
     "vision.js",
     "resources.js",
     "cache.js",
@@ -191,6 +193,7 @@ async function waitReady() {
     },
     mode,
     keepLoaded,
+    structured_prompt: structuredPrompt,
     offline: Boolean(args.offline),
     manifest: samples,
     manifest_sha256: hash(fs.readFileSync(args.manifest)),
@@ -274,6 +277,7 @@ async function waitReady() {
       seed: sample.seed,
       mode,
       keepLoaded,
+      structuredPrompt,
       cvStudy: Boolean(args["cv-study"]),
     };
     const result = await evaluate(

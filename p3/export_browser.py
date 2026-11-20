@@ -105,6 +105,8 @@ def main():
     parser.add_argument('--component',choices=['text','unet','decoder','all'],default='all')
     parser.add_argument('--device',choices=['cpu','cuda'],default='cpu')
     parser.add_argument('--text-precision',choices=['fp16','mixed-fp32'],default='fp16')
+    parser.add_argument('--adapter',type=Path,default=Path('p3/weights/t38-coco.safetensors'),
+                        help='Trained LoRA adapter fused into the browser denoiser.')
     args = parser.parse_args()
     args.out.mkdir(parents=True,exist_ok=True)
     with exclusive_run(args.out):
@@ -116,7 +118,11 @@ def execute(args):
     vae_dir, _ = resolve_taesd()
     torch.set_num_threads(4)
     dtype, device = torch.float16,args.device
-    adapter = Path('p3/weights/t38-coco.safetensors').resolve()
+    adapter = args.adapter.resolve()
+    if not adapter.is_file():
+        raise FileNotFoundError(
+            f'Missing trained adapter: {adapter}. Supply --adapter with the T38 LoRA artifact.'
+        )
     establish_protocol(args.out,{'schema':1,'source':source_hashes('export_browser.py'),
         'model':CHECKPOINTS['tiny'].__dict__,'decoder':TAESD.__dict__,'adapter':file_hash(adapter),
         'text_precision':args.text_precision,'device':device,'torch':torch.__version__,'onnx':onnx.__version__})

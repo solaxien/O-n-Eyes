@@ -48,9 +48,12 @@ The browser app implements:
 - **CLIP text encoding** via ONNX Runtime WebGPU
 - **DPM-Solver++ denoising** with configurable step counts (4/6/12)
 - **TAESD decoding** for lightweight latent-to-image conversion
-- **Classical CV post-processing** (speckle repair, bilateral filtering, color correction, quality gate) in JavaScript
+- **Classical CV post-processing** (speckle repair, bilateral filtering, color correction, quality gate, and a transparent no-reference pixel-health diagnostic) in JavaScript
 - **Service worker** for offline operation after initial model download
 - **Adaptive step profiles** for quality vs. latency tradeoff
+- **Prompt-aware Android planner** using prompt complexity, device class, measured local time, and an automatic local fallback chain
+- **Sampling reference profile** (20 steps) for a matched reduced-step benchmark
+- **In-page Optimization Lab** to compare the same prompt/seed at 20 steps and an optimized profile, plus optional visual CV ablations
 
 ## On-device evaluation (Poco F6)
 
@@ -63,6 +66,8 @@ All inference and CV ran in Chrome on the physical Poco F6. Each row uses the sa
 | Browser FP16 · 12 steps / 24 calls | 0.3053 | 14.648 / 14.900 | 1,518 | 854.857 |
 
 Six steps reduced median time by ~47% versus twelve, with CLIP lower by 0.005. A separate offline test took 16.54 s with networks off, zero server requests, and 8,844 GPU dispatches.
+
+The active source now includes prompt-aware profile selection and automatic retry after a local resource failure. Those changes require a new physical-phone benchmark before their performance or semantic benefit can be claimed. See [Android resource strategy and evaluation](docs/ANDROID_RESOURCE_STRATEGY.md).
 
 ## Project structure
 
@@ -86,3 +91,4 @@ docs/              Documentation and evidence
 - [Browser on-device design and evaluation](docs/BROWSER_ON_DEVICE.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [Evaluation for Team T38](eval_P3_T38.md)
+- [Android resource strategy and evaluation](docs/ANDROID_RESOURCE_STRATEGY.md)
