@@ -19,7 +19,8 @@ web,models=args.web.resolve(),args.models.resolve()
 
 class Handler(SimpleHTTPRequestHandler):
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, '.js':'text/javascript',
-                      '.mjs':'text/javascript', '.wasm':'application/wasm', '.json':'application/json'}
+                      '.mjs':'text/javascript', '.wasm':'application/wasm', '.json':'application/json',
+                      '.webmanifest':'application/manifest+json', '.png':'image/png'}
     def translate_path(self,path):
         path=unquote(urlsplit(path).path)
         root,relative=(models,path[8:]) if path.startswith('/models/') else (web,path.lstrip('/'))

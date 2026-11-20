@@ -24,8 +24,10 @@ const type = (name) =>
       ? "text/html; charset=utf-8"
       : name.endsWith(".css")
         ? "text/css; charset=utf-8"
-        : name.endsWith(".json")
-          ? "application/json"
+        : name.endsWith(".json") || name.endsWith(".webmanifest")
+          ? name.endsWith(".webmanifest") ? "application/manifest+json" : "application/json"
+          : name.endsWith(".png")
+            ? "image/png"
           : name.endsWith(".wasm")
             ? "application/wasm"
             : "text/plain; charset=utf-8";
@@ -33,6 +35,13 @@ for (const asset of new Set([...shell, "/sw.js", "/shell.json"])) {
   if (asset === "/") continue;
   if (asset.endsWith(".wasm"))
     remote[asset] = { file: asset.split("/").at(-1), type: type(asset) };
+  else if (asset.endsWith(".png"))
+    // Small app icons are embedded as base64 and decoded by the Worker.
+    embedded[asset] = {
+      body: (await readFile(join(web, asset.slice(1)))).toString("base64"),
+      base64: true,
+      type: type(asset),
+    };
   else
     embedded[asset] = {
       body: await readFile(join(web, asset.slice(1)), "utf8"),
@@ -77,7 +86,7 @@ const common={'Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-
 export default {async fetch(request){
   const url=new URL(request.url),path=url.pathname;
   if(!['GET','HEAD'].includes(request.method)||path.startsWith('/api/'))return new Response('No server inference exists.',{status:405,headers:common});
-  if(embedded[path])return new Response(request.method==='HEAD'?null:embedded[path].body,{headers:{...common,'Content-Type':embedded[path].type,'Cache-Control':'no-cache'}});
+  if(embedded[path])return new Response(request.method==='HEAD'?null:embedded[path].base64?Uint8Array.from(atob(embedded[path].body),c=>c.charCodeAt(0)):embedded[path].body,{headers:{...common,'Content-Type':embedded[path].type,'Cache-Control':'no-cache'}});
   if(!remote[path])return new Response('Not found',{status:404,headers:common});
   const asset=remote[path],headers={};
   if(request.headers.has('Range'))headers.Range=request.headers.get('Range');

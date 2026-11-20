@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#101717" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon-192.png" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
     <title>O(n) Eyes · On-device Image Lab</title>
     <link rel="stylesheet" href="style.css?client=browser-v3" />
     <script type="module" src="app.js?client=browser-v3"></script>
@@ -22,6 +25,10 @@
       <section id="setup-panel" class="panel" aria-labelledby="setup-title">
         <h2 id="setup-title">Prepare your device</h2>
         <p id="capability" role="status">Checking browser capabilities…</p>
+        <details class="cv-detail" open>
+          <summary>Device readiness</summary>
+          <ul id="readiness" class="check-list"></ul>
+        </details>
         <button id="prepare" disabled>Download models for offline use</button
         ><button id="cancel" hidden>Cancel</button
         ><progress id="download-progress" max="100" value="0" hidden></progress>
@@ -46,6 +53,12 @@ A product photograph of a red apple beside a blue cup on a white table.</textare
                 <option value="eco">Low memory · 256 px · 6 steps</option>
                 <option value="balanced">Balanced · 256 px · 12 steps</option>
                 <option value="quality">Slow detail · 384 px · 12 steps</option>
+              </select></label
+            ><label
+              >Device budget<select id="device-budget">
+                <option value="actual" selected>This device</option>
+                <option value="phone-4gb">Simulate a 4 GB phone</option>
+                <option value="force-fallback">Simulate a memory failure</option>
               </select></label
             ><label
               >Seed<input
@@ -121,7 +134,10 @@ A product photograph of a red apple beside a blue cup on a white table.</textare
             <h2 id="process-title">Generation process</h2>
             <p id="process-note" class="muted"></p>
             <ol id="process-timeline" class="timeline"></ol>
-            <div id="process-previews" class="process-previews"></div>
+            <details class="cv-detail">
+              <summary>Decoded diffusion checkpoints</summary>
+              <div id="process-previews" class="process-previews"></div>
+            </details>
           </section>
           <p class="muted">
             Poco F6 pilot: six-step repeat images took 7.55–7.93 s with models
@@ -188,7 +204,10 @@ A product photograph of a red apple beside a blue cup on a white table.</textare
               </div>
             </div>
             <p class="muted">Each image omits one visible correction stage from the same native decode. Safety checks continue to protect every generated output.</p>
-            <div id="cv-variants" class="variant-grid"></div>
+            <details class="cv-detail">
+              <summary>Show the ablation images</summary>
+              <div id="cv-variants" class="variant-grid"></div>
+            </details>
             <div id="cv-stress" class="stress-study" hidden>
               <h3>Controlled CV stress test</h3>
               <p class="muted">
@@ -196,7 +215,10 @@ A product photograph of a red apple beside a blue cup on a white table.</textare
                 conditional stage can be inspected visibly. These images are not
                 substituted for the generated output.
               </p>
-              <div id="cv-stress-cards" class="stress-grid"></div>
+              <details class="cv-detail">
+                <summary>Show the stress-test images</summary>
+                <div id="cv-stress-cards" class="stress-grid"></div>
+              </details>
             </div>
           </section>
           <details id="details" hidden>

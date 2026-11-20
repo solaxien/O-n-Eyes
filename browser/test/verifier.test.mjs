@@ -236,3 +236,34 @@ test("Artifact report flags a colour cast and an 8-pixel decoder grid", () => {
   assert.ok(artifactReport(grid, size, size).checks.find((c) => c.name.startsWith("decoder grid")).flagged);
   assert.equal(artifactReport(textured(size, 100), size, size).checks.find((c) => c.name.startsWith("decoder grid")).flagged, false);
 });
+
+import { chooseProfile, deviceBudget, readinessItems } from "../src/resources.js";
+test("Simulated budgets drive the real planner and stay labelled", () => {
+  const actual = deviceBudget("actual", { memoryGiB: 8, hardwareConcurrency: 8 }),
+    phone = deviceBudget("phone-4gb", { memoryGiB: 8, hardwareConcurrency: 8 }),
+    failing = deviceBudget("force-fallback", { memoryGiB: 8, hardwareConcurrency: 8 });
+  assert.equal(actual.simulated, false);
+  assert.equal(phone.simulated, true);
+  assert.equal(failing.failFirstAttempt, true);
+  assert.equal(chooseProfile("auto", { ...actual, complexity: 0.9 }).key, "balanced");
+  assert.equal(chooseProfile("auto", { ...phone, complexity: 0.9 }).key, "preview");
+  assert.equal(chooseProfile("quality", phone).key, "eco");
+});
+
+test("Readiness report states each capability and the plan it implies", () => {
+  const items = readinessItems({
+      webgpu: true,
+      fp16: false,
+      quotaBytes: 500 * 2 ** 20,
+      usageBytes: 0,
+      requiredBytes: 896382552,
+      budget: deviceBudget("phone-4gb"),
+    }),
+    get = (label) => items.find((i) => i.label === label);
+  assert.equal(get("WebGPU").status, "pass");
+  assert.equal(get("FP16 shaders").status, "fail");
+  assert.equal(get("Storage").status, "fail");
+  assert.match(get("Memory class and cores").detail, /simulated/);
+  assert.match(get("Auto plan").detail, /Fast preview/);
+  assert.equal(get("Prompt verifier").status, "not_verifiable");
+});

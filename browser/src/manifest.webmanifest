@@ -1,0 +1,23 @@
+{
+  "name": "O(n) Eyes On-device Image Lab",
+  "short_name": "Image Lab",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101717",
+  "theme_color": "#101717",
+  "description": "Text-to-image generation that runs on this device.",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

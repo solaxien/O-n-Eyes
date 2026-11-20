@@ -4,7 +4,7 @@ import { Tokenizer } from "./tokenizer.js";
 import { toHalf, noise, dpmStep } from "./numerics.js";
 import { colorEvidence, cvStressStudy, differenceMap, enhance, png } from "./vision.js";
 import { analyzePrompt, conditioningPrompt, QUALITY_NEGATIVE, QUALITY_SUFFIX } from "./prompt.js";
-import { chooseProfile, previewSteps } from "./resources.js";
+import { chooseProfile, deviceBudget, previewSteps } from "./resources.js";
 import { decode as decodeDetections, preprocess as detectorInput, verify } from "./verifier.js";
 
 ort.env.wasm.numThreads = 1;
@@ -176,9 +176,13 @@ self.onmessage = async ({ data }) => {
       );
     semantic = analyzePrompt(data.prompt);
     processEvent("prompt", "active", "Parsing the prompt and selecting a local resource profile.");
+    const budget = deviceBudget(data.deviceBudget, {
+      memoryGiB: navigator.deviceMemory || 4,
+      hardwareConcurrency: navigator.hardwareConcurrency || 4,
+    });
     profile = chooseProfile(data.mode, {
-        memoryGiB: navigator.deviceMemory || 4,
-        hardwareConcurrency: navigator.hardwareConcurrency || 4,
+        memoryGiB: budget.memoryGiB,
+        hardwareConcurrency: budget.hardwareConcurrency,
         stepMs: observedStepMs,
         complexity: semantic.complexity,
         keepLoaded: retain,
@@ -189,6 +193,9 @@ self.onmessage = async ({ data }) => {
       "done",
       `${profile.label}: ${profile.size} px and ${profile.steps} diffusion steps.`,
     );
+    if (budget.failFirstAttempt && (data.attempt || 1) === 1 && profile.fallback_chain.length)
+      // Demonstration only: behaves exactly like a real out-of-memory report.
+      throw Error(`Simulated memory limit exceeded for ${profile.key} (fallback demonstration).`);
     const manifest = await (await getAsset("manifest.json")).json();
     const tokenizer = new Tokenizer(
       await (await getAsset("vocab.json")).json(),
@@ -418,6 +425,7 @@ self.onmessage = async ({ data }) => {
       device_budget: {
         memory_class_gib: navigator.deviceMemory || null,
         logical_cores: navigator.hardwareConcurrency || null,
+        planner_budget: budget,
         target_ms: profile.targetMs,
       },
       semantic_plan: {

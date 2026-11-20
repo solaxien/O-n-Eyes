@@ -115,3 +115,76 @@ export function chooseProfile(
     retained: keepLoaded,
   });
 }
+
+// Demonstration budgets. They feed the same planner as real measurements, so
+// the adaptive and fallback paths can be shown live; results are labelled as
+// simulated wherever they appear.
+export const DEVICE_BUDGETS = Object.freeze({
+  actual: { key: "actual", label: "This device (browser-reported)" },
+  "phone-4gb": { key: "phone-4gb", label: "Simulated 4 GB, 4-core phone", memoryGiB: 4, hardwareConcurrency: 4 },
+  "force-fallback": {
+    key: "force-fallback",
+    label: "Simulated memory failure on the first attempt",
+    failFirstAttempt: true,
+  },
+});
+
+export function deviceBudget(key, reported = {}) {
+  const budget = DEVICE_BUDGETS[key] || DEVICE_BUDGETS.actual;
+  return {
+    key: budget.key,
+    label: budget.label,
+    simulated: budget.key !== "actual",
+    memoryGiB: budget.memoryGiB ?? reported.memoryGiB ?? 4,
+    hardwareConcurrency: budget.hardwareConcurrency ?? reported.hardwareConcurrency ?? 4,
+    failFirstAttempt: Boolean(budget.failFirstAttempt),
+  };
+}
+
+const MIB = 2 ** 20;
+/**
+ * Device readiness report. Every line says what was checked and what the app
+ * will do about it. Inputs come from browser APIs; nothing is guessed.
+ */
+export function readinessItems({
+  webgpu = false,
+  fp16 = false,
+  quotaBytes,
+  usageBytes,
+  requiredBytes,
+  memoryGiB,
+  hardwareConcurrency,
+  modelsCached = false,
+  verifierCached = false,
+  serviceWorker = false,
+  budget = deviceBudget("actual", { memoryGiB, hardwareConcurrency }),
+} = {}) {
+  const items = [];
+  const add = (label, status, detail) => items.push({ label, status, detail });
+  add("WebGPU", webgpu ? "pass" : "fail", webgpu ? "A GPU adapter is available to this page." : "No WebGPU adapter; this device cannot run the model locally.");
+  add("FP16 shaders", fp16 ? "pass" : "fail", fp16 ? "shader-f16 is supported, so FP16 weights run as exported." : "shader-f16 is missing; the FP16 model cannot run here.");
+  if (Number.isFinite(quotaBytes) && Number.isFinite(usageBytes)) {
+    const free = quotaBytes - usageBytes,
+      enough = modelsCached || free >= requiredBytes * 1.2;
+    add("Storage", enough ? "pass" : "fail",
+      modelsCached
+        ? `Models already cached; ${Math.round(free / MIB)} MiB still free for this site.`
+        : `${Math.round(free / MIB)} MiB free; about ${Math.round((requiredBytes * 1.2) / MIB)} MiB needed for the model bundle.`);
+  } else add("Storage", "not_verifiable", "This browser does not report a storage estimate.");
+  const simple = chooseProfile("auto", { memoryGiB: budget.memoryGiB, hardwareConcurrency: budget.hardwareConcurrency, complexity: 0.2 }),
+    complex = chooseProfile("auto", { memoryGiB: budget.memoryGiB, hardwareConcurrency: budget.hardwareConcurrency, complexity: 0.9 });
+  add("Memory class and cores", "pass",
+    `${budget.memoryGiB} GB class, ${budget.hardwareConcurrency} cores${budget.simulated ? " (simulated)" : ""}. ` +
+      "Browsers report a coarse class, not free memory.");
+  add("Auto plan", "pass",
+    `Simple prompts: ${simple.label}, ${simple.size} px, ${simple.steps} steps. Complex prompts: ${complex.label}, ${complex.size} px, ${complex.steps} steps.`);
+  add("Fallback", "pass",
+    budget.failFirstAttempt
+      ? "Demo: the first attempt reports a simulated memory failure, so the real fallback chain runs."
+      : "On a memory or numerical failure the app releases the worker and retries one profile lower.");
+  add("Models", modelsCached ? "pass" : "not_verifiable", modelsCached ? "All model files are cached and checksum-verified." : "Models are not downloaded yet.");
+  add("Prompt verifier", verifierCached ? "pass" : "not_verifiable",
+    verifierCached ? "Compact detector cached; Balanced and Slow detail can check prompts." : "Not cached; prompt checks will be reported as unavailable.");
+  add("Offline use", serviceWorker ? "pass" : "fail", serviceWorker ? "The app shell is cached by a service worker." : "No service worker; offline use is not possible.");
+  return items;
+}

@@ -1,5 +1,5 @@
 import { getAsset, prepareModels, MODEL_CACHE } from "./cache.js";
-import { chooseProfile, nextFallback } from "./resources.js";
+import { chooseProfile, deviceBudget, nextFallback, readinessItems } from "./resources.js";
 import { analyzePrompt, semanticSummary } from "./prompt.js";
 import { candidateScore, candidateSeed, pickBest, selectionPolicy, shouldContinue } from "./selection.js";
 // Profiles where the compact verifier runs; it then steers retries or picks
@@ -40,6 +40,7 @@ function setComparisonStatus(message) {
 }
 function markModelsReady({ scrollToControls = false } = {}) {
   state.ready = true;
+  queueMicrotask(() => renderReadiness().catch(() => {}));
   $("setup-panel").classList.add("ready");
   $("prepare").textContent = "Recheck cached models";
   syncControls();
@@ -48,11 +49,59 @@ function markModelsReady({ scrollToControls = false } = {}) {
       $("form").scrollIntoView({ behavior: "smooth", block: "start" }),
     );
 }
+function currentBudget() {
+  return deviceBudget($("device-budget").value, {
+    memoryGiB: navigator.deviceMemory || 4,
+    hardwareConcurrency: navigator.hardwareConcurrency || 4,
+  });
+}
+async function renderReadiness() {
+  let estimate = {},
+    modelsCached = false,
+    verifierCached = false,
+    required = 0;
+  try {
+    estimate = await navigator.storage.estimate();
+  } catch {}
+  try {
+    const index = await fetch("/model-index.json").then((r) => r.json()),
+      manifest = await (await getAsset("manifest.json", { sha256: index.manifest_sha256 })).json(),
+      cache = await caches.open(MODEL_CACHE),
+      files = Object.values(manifest.components).flatMap((c) => c.files);
+    required = files.reduce((s, f) => s + f.bytes, 0);
+    modelsCached = true;
+    for (const file of files) {
+      const r = await cache.match("/models/" + file.path);
+      if (!r || r.headers.get("x-model-sha256") !== file.sha256) modelsCached = false;
+    }
+    const verifier = await fetch("/verifier-index.json").then((r) => r.json()),
+      cached = await cache.match("/models/" + verifier.path);
+    verifierCached = Boolean(cached && cached.headers.get("x-model-sha256") === verifier.sha256);
+  } catch {}
+  const items = readinessItems({
+    webgpu: Boolean(adapter),
+    fp16: Boolean(adapter?.features.has("shader-f16")),
+    quotaBytes: estimate.quota,
+    usageBytes: estimate.usage,
+    requiredBytes: required || 896382552,
+    modelsCached,
+    verifierCached,
+    serviceWorker: Boolean(navigator.serviceWorker?.controller),
+    budget: currentBudget(),
+  });
+  const list = $("readiness");
+  list.replaceChildren();
+  for (const item of items) {
+    const node = appendText(list, `${item.label}: ${item.detail}`, "li");
+    node.className = "check " + item.status;
+  }
+}
 function updateProfilePreview() {
-  const plan = analyzePrompt($("prompt").value),
+  const budget = currentBudget(),
+    plan = analyzePrompt($("prompt").value),
     profile = chooseProfile($("mode").value, {
-      memoryGiB: navigator.deviceMemory || 4,
-      hardwareConcurrency: navigator.hardwareConcurrency || 4,
+      memoryGiB: budget.memoryGiB,
+      hardwareConcurrency: budget.hardwareConcurrency,
       complexity: plan.complexity,
       keepLoaded: $("keep-loaded").checked,
     });
@@ -285,9 +334,11 @@ $("prepare").onclick = async () => {
   }
 };
 $("cancel").onclick = () => state.controller?.abort();
-for (const id of ["prompt", "mode", "keep-loaded"])
+for (const id of ["prompt", "mode", "keep-loaded", "device-budget"])
   $(id).addEventListener("input", updateProfilePreview);
+$("device-budget").addEventListener("input", () => renderReadiness());
 updateProfilePreview();
+renderReadiness();
 
 function renderCvStudy(result) {
   clearCvStudy();
@@ -699,6 +750,7 @@ async function generate({
   verify = $("verify-prompt").checked,
   qualityHints = $("quality-hints").checked,
   budgetMs,
+  deviceBudgetKey = $("device-budget").value,
 }) {
   if (!state.ready || state.busy)
     throw Error(
@@ -752,6 +804,7 @@ async function generate({
           verify,
           verifyProfiles: VERIFY_PROFILES,
           qualityHints,
+          deviceBudget: deviceBudgetKey,
         });
         data.metadata.recovery = { used: failures.length > 0, failures: [...failures] };
         return data;
@@ -762,7 +815,12 @@ async function generate({
         if (state.worker === worker) state.worker = null;
         worker = null;
         if (!fallback) throw Error(error.message || String(error));
-        failures.push({ attempt, profile: failed, message: error.message || String(error) });
+        failures.push({
+          attempt,
+          profile: failed,
+          message: error.message || String(error),
+          simulated: /Simulated memory limit/.test(error.message || ""),
+        });
         attempt += 1;
         attemptMode = fallback;
         fallbackFrom = failed;
