@@ -2,7 +2,7 @@
 
 **O(n) Eyes · Team T38**
 
-P3 Image Lab is a resource-efficient text-to-image generation system that runs entirely on the visitor's device. The browser app uses ONNX Runtime with WebGPU to perform diffusion inference locally — no server-side GPU is needed. It works offline after the initial model download via a service worker.
+P3 Image Lab is a resource-efficient text-to-image generation system that runs entirely on the visitor's device. The browser app uses ONNX Runtime with WebGPU to perform diffusion inference locally, so no server-side GPU is needed. It works offline after the initial model download via a service worker.
 
 [Open P3 Image Lab](https://on-eyes-device-lab-t38.brawnymoss1024.chatgpt.site) · [Browser evaluation](docs/BROWSER_ON_DEVICE.md) · [Deployment](docs/DEPLOYMENT.md)
 
@@ -54,6 +54,11 @@ The browser app implements:
 - **Prompt-aware Android planner** using prompt complexity, device class, measured local time, and an automatic local fallback chain
 - **Sampling reference profile** (20 steps) for a matched reduced-step benchmark
 - **In-page Optimization Lab** to compare the same prompt/seed at 20 steps and an optimized profile, plus optional visual CV ablations
+- **On-device prompt checks** with a 3.6 MB YOLOX-Nano detector: object presence, exact counts, colour inside each detected box, and 2D layout; depth and non-COCO objects are shown as not verifiable
+- **Budgeted retry and selection**: Balanced retries once with a new seed when a checkable clause fails; Slow detail keeps the best of up to three candidates within a time budget; the 20-step reference is never retried or selected
+- **Quality hints**: an optional negative prompt and quality suffix that add no denoiser calls
+- **Device readiness report and simulated budgets** to show adaptive selection and the real fallback chain live
+- **Installable app** (web manifest and icons) on top of the offline service worker
 
 ## On-device evaluation (Poco F6)
 
@@ -75,9 +80,12 @@ The active source now includes prompt-aware profile selection and automatic retr
 browser/           In-browser ONNX WebGPU diffusion app
   src/             Application source (app, worker, vision, tokenizer, etc.)
   test/            Browser pipeline tests
-p3/                Python utilities
+p3/                Python utilities (offline export, training and evaluation only; no serving)
   export_browser.py   Export PyTorch models to ONNX for browser
-  import_browser_run.py Import and score browser run results
+  quantize_browser.py Weight-only INT8 U-Net variant with agreement report
+  import_browser_run.py Import phone captures for scoring
+  benchmark.py, score.py  GPU benchmark variants and the independent offline scorer (CLIP, YOLOS, FID, KID)
+  train_lora.py    COCO LoRA training (the adapter fused into the browser model)
   models.py        Model checkpoint definitions
   provenance.py    Experiment provenance and hashing
 scripts/           Benchmarking, phone monitoring, dev server
@@ -86,8 +94,27 @@ deploy/            Hosting configuration
 docs/              Documentation and evidence
 ```
 
+## Measure the current source
+
+Everything below writes to a new folder and never overwrites evidence.
+
+```powershell
+# Phone: 20-step reference, Balanced, Eco and Preview, then offline scoring and the report table
+powershell -ExecutionPolicy Bypass -File scripts\run_phase1.ps1 -Origin <https-origin> -Tab <tab-id> -Adb <adb.exe> -SelectionStudy
+
+# Laptop GPU: CLIP, KID and FID on 1,000 COCO captions with the same weights and steps
+powershell -ExecutionPolicy Bypass -File scripts\run_gpu_quality.ps1 -Count 1000
+
+# Optional INT8 experiment (keep FP16 unless the phone shows a real gain)
+python -m p3.quantize_browser --export .models/browser/v3 --out .models/browser/v3-int8
+```
+
+Step-by-step instructions, including the one-time verifier upload, are in [HANDOFF.md](HANDOFF.md).
+
 ## Documentation
 
+- [System design](docs/DESIGN.md)
+- [Handoff and run book](HANDOFF.md)
 - [Browser on-device design and evaluation](docs/BROWSER_ON_DEVICE.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [Evaluation for Team T38](eval_P3_T38.md)

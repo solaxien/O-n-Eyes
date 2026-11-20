@@ -25,7 +25,7 @@ After decode, the app also records sampled global evidence for each requested co
 
 The web interface exposes an **Optimization Lab** for an interactive, matched demonstration: it generates a 20-step reference and the selected optimized profile from the same prompt and seed, then shows their images, local worker runtimes, steps, resolution, and U-Net call counts. It also has an optional CV-ablation control that renders variants with one post-processing stage omitted. The displayed `pixel-health` score is a no-reference heuristic based on contrast, edge variance, clipping, and detected isolated artifacts; it is explicitly not a realism or semantic score.
 
-This parser is not an image verifier. The metadata names every requested clause and explicitly states that the current model release does not include an on-device object/relation detector. Pixel quality gates and classical CV cannot prove that an apple is green, that a cup exists, or that one object is left of another.
+The parser itself is not an image verifier. Since the v2-verifier update, Balanced and Slow detail run a compact on-device detector (YOLOX-Nano, COCO classes) after generation. It checks object presence, exact counts, colour inside each detected box, and left/right/above/below/beside, and it labels depth relations and non-COCO objects as not verifiable. Its results steer one retry (Balanced) or best-of-three selection (Slow detail). They are never used as the final accuracy score; that comes from the separate offline scorer. Pixel quality gates and classical CV still cannot prove semantic correctness on their own.
 
 ## Required Android measurement runs
 
@@ -56,7 +56,7 @@ python scripts/compare_browser_profiles.py --run .runs/browser/android-baseline-
 
 For each configuration, record model bytes, cached storage, cold preparation time, p50/p95 submit-to-visible latency, and sampled Chrome package PSS. PSS is an aggregate proxy, not an exact WebGPU allocation. Keep cold model initialization and the first model download separate from resident generation latency.
 
-Score the captured images with a held-out semantic evaluator for object presence, count, colour binding, and relations. Use a different evaluator from any selector that might influence which image is shown. Report CLIP on the same prompt/image pairs and FID or KID only with a sufficiently large matched real-image reference set. The app does not yet bundle that evaluator; its current historical 16-prompt results remain insufficient for a semantic-success claim.
+Score the captured images with a held-out semantic evaluator for object presence, count, colour binding, and relations. Use a different evaluator from any selector that might influence which image is shown. Report CLIP on the same prompt/image pairs and FID or KID only with a sufficiently large matched real-image reference set. The offline scorer (`p3/score.py`, YOLOS-Tiny and CLIP crops) is that independent evaluator; it uses a different detector from the on-device verifier. `scripts/run_phase1.ps1` runs the full protocol. The historical 16-prompt results remain insufficient for a semantic-success claim.
 
 ## Acceptance criteria
 
