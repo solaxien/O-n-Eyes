@@ -1,3 +1,4 @@
 -r requirements.txt
 onnx==1.23.2
 onnxruntime==1.31.1
+onnx-ir==1.1.0
