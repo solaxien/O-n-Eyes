@@ -58,12 +58,12 @@ for (const file of Object.values(manifest.components).flatMap((c) => c.files))
     type: "application/octet-stream",
     sha256: file.sha256,
   };
-// Optional on-device verifier (upload this file to the same release).
+// Stream the pinned detector from its upstream release through the same-origin model route.
 const verifier = JSON.parse(
   await readFile(resolve("browser/verifier-manifest.json"), "utf8"),
 );
 remote["/models/" + verifier.path] = {
-  file: verifier.path,
+  url: verifier.source,
   type: "application/octet-stream",
   sha256: verifier.sha256,
 };
@@ -90,7 +90,7 @@ export default {async fetch(request){
   if(!remote[path])return new Response('Not found',{status:404,headers:common});
   const asset=remote[path],headers={};
   if(request.headers.has('Range'))headers.Range=request.headers.get('Range');
-  const response=await fetch(release+asset.file,{method:request.method,headers,redirect:'follow'});
+  const response=await fetch(asset.url || release+asset.file,{method:request.method,headers,redirect:'follow'});
   if(!response.ok)return new Response('Static asset temporarily unavailable. Retry preparation.',{status:502,headers:common});
   const resultHeaders=new Headers({...common,'Content-Type':asset.type,'Cache-Control':'public,max-age=31536000,immutable'});
   for(const key of ['Content-Length','Content-Range','Accept-Ranges'])if(response.headers.has(key))resultHeaders.set(key,response.headers.get(key));

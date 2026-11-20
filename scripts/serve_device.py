@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from urllib.request import urlopen
 from urllib.error import HTTPError, URLError
+import json
 import shutil
 import re
 
@@ -16,6 +17,7 @@ parser.add_argument('--models',type=Path,default=Path('.models/browser/v3'))
 parser.add_argument('--remote-models',help='Optional HTTPS static release directory; no inference endpoint.')
 args=parser.parse_args()
 web,models=args.web.resolve(),args.models.resolve()
+verifier = json.loads((web / "verifier-index.json").read_text(encoding="utf-8"))
 
 class Handler(SimpleHTTPRequestHandler):
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, '.js':'text/javascript',
@@ -35,13 +37,19 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path=unquote(urlsplit(self.path).path)
-        if args.remote_models and path.startswith('/models/'):
+        if path.startswith('/models/'):
+            verifier_path = '/models/' + verifier['path']
+            if path == verifier_path and (models / verifier['path']).is_file():
+                return super().do_GET()
+            if path != verifier_path and not args.remote_models:
+                return super().do_GET()
             name=path[8:]
             if not re.fullmatch(r'[A-Za-z0-9_-]+\.(bin|onnx|json|txt|f32|tensor)',name):
                 self.send_error(404)
                 return
             try:
-                with urlopen(args.remote_models.rstrip('/')+'/'+name,timeout=60) as source:
+                url = verifier['source'] if path == verifier_path else args.remote_models.rstrip('/')+'/'+name
+                with urlopen(url,timeout=60) as source:
                     self.send_response(200)
                     self.send_header('Content-Type',self.guess_type(name))
                     if source.headers.get('Content-Length'):

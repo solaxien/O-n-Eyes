@@ -63,6 +63,19 @@ export async function getAsset(
   }
   return result;
 }
+async function verifierIndex() {
+  const response = await fetch("/verifier-index.json");
+  if (!response.ok) throw Error("Could not load the verifier manifest.");
+  return response.json();
+}
+
+export async function isVerifierCached() {
+  const verifier = await verifierIndex();
+  const cache = await caches.open(MODEL_CACHE);
+  const cached = await cache.match("/models/" + verifier.path);
+  return cached?.headers.get("x-model-sha256") === verifier.sha256;
+}
+
 export async function prepareModels(progress, signal) {
   const index = await fetch("/model-index.json").then((r) => r.json());
   const manifest = await (
@@ -79,7 +92,13 @@ export async function prepareModels(progress, signal) {
   const total = files.reduce((s, x) => s + x.bytes, 0);
   let finished = 0;
   const estimate = await navigator.storage.estimate();
-  if (estimate.quota - estimate.usage < total * 1.2)
+  const cache = await caches.open(MODEL_CACHE);
+  let missingBytes = 0;
+  for (const file of files) {
+    const cached = await cache.match("/models/" + file.path);
+    if (cached?.headers.get("x-model-sha256") !== file.sha256) missingBytes += file.bytes;
+  }
+  if (estimate.quota - estimate.usage < missingBytes * 1.2)
     throw Error(
       "Not enough browser storage for the model. Free space and retry.",
     );
@@ -115,7 +134,7 @@ export async function prepareModels(progress, signal) {
   // The compact verifier is optional. Generation still works without it; the
   // app then reports that prompt checks were not run.
   try {
-    const verifier = await fetch("/verifier-index.json").then((r) => r.json());
+    const verifier = await verifierIndex();
     progress({ file: verifier.path, bytes: total, total });
     await getAsset(verifier.path, {
       download: true,
@@ -127,6 +146,7 @@ export async function prepareModels(progress, signal) {
   } catch (error) {
     if (signal?.aborted) throw error;
     manifest.verifier_ready = false;
+    manifest.verifier_error = error.message;
     console.warn("On-device verifier unavailable:", error);
   }
   return manifest;

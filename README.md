@@ -19,7 +19,7 @@ npm run build
 Then serve the `browser/dist` directory with any static HTTP server, or use the included device server:
 
 ```sh
-python scripts/serve_device.py --root browser/dist --port 8080
+python scripts/serve_device.py --web browser/dist --port 8080
 ```
 
 Open `http://localhost:8080` in a WebGPU-capable browser (Chrome 113+). The first load downloads the pinned ONNX model files (~855 MB). Subsequent loads use the browser cache and work offline.
@@ -106,7 +106,7 @@ powershell -ExecutionPolicy Bypass -File scripts\run_phase1.ps1 -Origin <https-o
 python -m p3.quantize_browser --export .models/browser/v3 --out .models/browser/v3-int8
 ```
 
-Step-by-step instructions, including the one-time verifier upload, are in [HANDOFF.md](HANDOFF.md).
+Step-by-step instructions, including preparing the offline verifier, are in [HANDOFF.md](HANDOFF.md).
 
 ## Documentation
 

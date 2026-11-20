@@ -1,4 +1,4 @@
-import { getAsset, prepareModels, MODEL_CACHE } from "./cache.js";
+import { getAsset, isVerifierCached, prepareModels, MODEL_CACHE } from "./cache.js";
 import { chooseProfile, deviceBudget, nextFallback, readinessItems } from "./resources.js";
 import { analyzePrompt, semanticSummary } from "./prompt.js";
 import { candidateScore, candidateSeed, pickBest, selectionPolicy, shouldContinue } from "./selection.js";
@@ -74,9 +74,7 @@ async function renderReadiness() {
       const r = await cache.match("/models/" + file.path);
       if (!r || r.headers.get("x-model-sha256") !== file.sha256) modelsCached = false;
     }
-    const verifier = await fetch("/verifier-index.json").then((r) => r.json()),
-      cached = await cache.match("/models/" + verifier.path);
-    verifierCached = Boolean(cached && cached.headers.get("x-model-sha256") === verifier.sha256);
+    verifierCached = await isVerifierCached();
   } catch {}
   const items = readinessItems({
     webgpu: Boolean(adapter),
@@ -278,10 +276,14 @@ try {
       }
     }
     if (complete && Object.keys(manifest.components).length === 3) {
+      const verifierReady = await isVerifierCached().catch(() => false);
       markModelsReady();
+      if (!verifierReady) $("prepare").textContent = "Download prompt verifier";
       $("stage").textContent = "Models cached. Ready for local generation.";
       $("download-status").textContent =
-        "Model files are cached on this device. Generation can run offline.";
+        verifierReady
+          ? "Generation and prompt checks are ready offline."
+          : "Images can be generated offline. Download the prompt verifier to enable checks and retries.";
       setComparisonStatus(
         "Ready for a matched 20-step reference and optimized local comparison.",
       );
@@ -307,16 +309,19 @@ $("prepare").onclick = async () => {
   const controller = new AbortController();
   state.controller = controller;
   try {
-    await prepareModels(({ file, bytes, total }) => {
+    const prepared = await prepareModels(({ file, bytes, total }) => {
       $("download-progress").value = (bytes / total) * 100;
       $("download-status").textContent =
         `${(bytes / 1e6).toFixed(0)} / ${(total / 1e6).toFixed(0)} MB · ${file}`;
     }, controller.signal);
     const persistent = await navigator.storage.persist().catch(() => false);
-    markModelsReady({ scrollToControls: true });
+    markModelsReady({ scrollToControls: prepared.verifier_ready });
+    if (!prepared.verifier_ready) $("prepare").textContent = "Retry verifier download";
     $("stage").textContent = "Ready. Generation runs entirely in this browser.";
     $("download-status").textContent =
-      `Model files are cached and verified. ${persistent ? "Persistent storage granted." : "The browser may evict cached files when storage is low."}`;
+      prepared.verifier_ready
+        ? `Generation and prompt checks are ready offline. ${persistent ? "Persistent storage granted." : "The browser may evict cached files when storage is low."}`
+        : `Image generation is ready. Prompt checks and retries are unavailable. ${prepared.verifier_error}`;
     setComparisonStatus(
       "Ready for a matched 20-step reference and optimized local comparison.",
     );

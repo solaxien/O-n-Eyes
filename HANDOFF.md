@@ -7,7 +7,7 @@ Branch: `v2-verifier`, built on `v2`. This file says what was changed, what was 
 | Phase | Code | Verified here | Team still needs to |
 | --- | --- | --- | --- |
 | 1. Trusted baseline | `scripts/run_phase1.ps1` and `scripts/phase1_report.py` | Report generator and KID unit-tested | Run the phone study and paste the table into `eval_P3_T38.md` |
-| 2. On-device verifier | `browser/src/verifier.js`, worker integration, UI checks | 32 browser tests; JS detector output matches Python ONNX on two real phone images | Upload the detector file (step 2), time it on the phone |
+| 2. On-device verifier | `browser/src/verifier.js`, worker integration, UI checks | 32 browser tests; JS detector output matches Python ONNX on two real phone images | Prepare the detector (step 2) and time it on the phone |
 | 3. Retry and selection | `browser/src/selection.js`, candidate loop in `app.js`, timeline UI | Policy tests | Run `-SelectionStudy` to show the gain on the offline scorer |
 | 4. INT8 | `p3/quantize_browser.py` | Toy-model test (MatMulNBits, sharding, agreement report) | Run on the real export, test desktop WebGPU, then the phone; keep or reject |
 | 5. Classical CV evidence | Exposure stage, per-stage reasons and timing, defect report, offline BRISQUE | Unit tests; BRISQUE smoke test | Run `scripts/offline_iqa.py` (included in the Phase 1 script) |
@@ -15,14 +15,11 @@ Branch: `v2-verifier`, built on `v2`. This file says what was changed, what was 
 
 Not delivered: an on-device image-text alignment model (no compact CLIP-style model could be fetched in the build environment). The verifier reports alignment as not bundled.
 
-## 2. One-time: publish the verifier model
+## 2. Cache the verifier on the device
 
-1. Download `https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.onnx`.
-2. Check its SHA-256 is `c789161ed43c8269fcd4e67c67eeeb4e80c622da2eb296a20bc6007bd18a0b7d`.
-3. Rename it to `verifier-yolox-nano.onnx` and upload it as an asset of the `browser-models-v3` release.
-4. For local serving, also copy it into `.models/browser/v3/` next to the other model files.
+Use Prepare while online. The packaged site and Python host serve the official YOLOX-Nano release through `/models/verifier-yolox-nano.onnx`. The browser checks the size and SHA-256 pinned in `browser/verifier-manifest.json` before caching it. Existing installations can fetch the verifier while reusing their generation weights. For a fully offline local host, place the matching detector at `.models/browser/v3/verifier-yolox-nano.onnx` before opening the site.
 
-Without this file the app still generates; prompt checks then say "verifier unavailable" and no semantic retry is claimed.
+The setup panel reports when prompt checks are available offline. If the download fails, generation remains available and the panel offers a retry.
 
 ## 3. Build, test and deploy
 
