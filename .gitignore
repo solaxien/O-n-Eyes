@@ -15,3 +15,5 @@ __pycache__/
 *.onnx
 *.zip
 *.log
+browser/node_modules/
+browser/dist/

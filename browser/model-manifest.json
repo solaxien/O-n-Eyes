@@ -1,0 +1,285 @@
+{
+  "schema": 1,
+  "model": {
+    "repo": "nota-ai/bk-sdm-tiny-2m",
+    "revision": "aad3e0e8ba61b7cb9f64869dc4e586f8ad9d3665"
+  },
+  "decoder": {
+    "repo": "madebyollin/taesd",
+    "revision": "614f76814bbe30edbe2e627ace1c2234c81a2c0e"
+  },
+  "adapter_sha256": "dcffb4476adcf795689bd710679eaaaf96d19bf5a7ec7f23bf0a46e2cd295c49",
+  "source": {
+    "export_browser.py": "d771bf6701cc2553dfb1086b417b8a1a5a7d2f5790efea1c1fbabf80fc291055"
+  },
+  "components": {
+    "text": {
+      "graph": "text.onnx",
+      "files": [
+        {
+          "path": "text.onnx",
+          "bytes": 149983,
+          "sha256": "9d99037b0bda775833e6c5c6e45716a6e44814a1239374ebca36873d4c587b6e"
+        },
+        {
+          "path": "text-00.bin",
+          "bytes": 75890688,
+          "sha256": "22e014e18663bc94e798325d3db2a2553220bb14a2fdfb869b4b37cf0fd6a12c"
+        },
+        {
+          "path": "text-01.bin",
+          "bytes": 66421248,
+          "sha256": "f9245c797516abb788c0fbc0f56ce56ff8e7af1ce3c5e609a8185b80a6f5cae4"
+        },
+        {
+          "path": "text-02.bin",
+          "bytes": 66060288,
+          "sha256": "ccca92e11505598ca9d9d5be0f6879ec7728c34c5002232cec210c2fc8031a04"
+        },
+        {
+          "path": "text-03.bin",
+          "bytes": 37748736,
+          "sha256": "136b1b9ec66557bf9778647ee9114d1e8cceadb6580461d35c7f25401c766ed0"
+        }
+      ],
+      "operators": [
+        "Add",
+        "Cast",
+        "Constant",
+        "ConstantOfShape",
+        "Equal",
+        "Expand",
+        "Gather",
+        "LayerNormalization",
+        "MatMul",
+        "Mul",
+        "Reshape",
+        "Sigmoid",
+        "Softmax",
+        "Transpose",
+        "Where"
+      ],
+      "reference": {
+        "inputs": {
+          "input_ids": {
+            "path": "text-input_ids.tensor",
+            "shape": [
+              1,
+              77
+            ],
+            "dtype": "int32"
+          }
+        },
+        "output": {
+          "path": "text-expected.f32",
+          "shape": [
+            1,
+            77,
+            768
+          ]
+        }
+      },
+      "precision": "fp16 weights and neural inputs; fp32 output"
+    },
+    "unet": {
+      "graph": "unet.onnx",
+      "files": [
+        {
+          "path": "unet.onnx",
+          "bytes": 912493,
+          "sha256": "26d54bdaf0bb625a0a52e41f72d7b6a43420a9d65ae5b5cf7065cccb8f79e96f"
+        },
+        {
+          "path": "unet-00.bin",
+          "bytes": 57666560,
+          "sha256": "623a9f04461d61018d6db09b48c21c18c868e45c8abfe08d578286eef58b7d0d"
+        },
+        {
+          "path": "unet-01.bin",
+          "bytes": 44339200,
+          "sha256": "81fc1a28c1b22e1be723cf63b5d9b106f0f44e0b2a36b980b01df49b87f9fbc2"
+        },
+        {
+          "path": "unet-02.bin",
+          "bytes": 62264320,
+          "sha256": "6b1362b4cd9da4d2304f4c625233ede2bdc15e57f6a1122d8e1de2a486b9a9c4"
+        },
+        {
+          "path": "unet-03.bin",
+          "bytes": 36049920,
+          "sha256": "f4166edb814361071f3c81b8f7bf337a29d3fdb0c556de98563cf920f7a729c9"
+        },
+        {
+          "path": "unet-04.bin",
+          "bytes": 47518720,
+          "sha256": "145f3700d564de2904371f8cd58d1d632423c6840a2312b9c76be9be6d6ce576"
+        },
+        {
+          "path": "unet-05.bin",
+          "bytes": 66410240,
+          "sha256": "15cc7466614d4c3d0e3266b5e3ef5c1daecf08e04e865ff89f39ad2bc91ce61e"
+        },
+        {
+          "path": "unet-06.bin",
+          "bytes": 63920640,
+          "sha256": "035dd9cfcf88cbe2ade2f27fcd6f92e0f9e0a41a882e43a7871daa2bf3dd244c"
+        },
+        {
+          "path": "unet-07.bin",
+          "bytes": 60579840,
+          "sha256": "9a1243c457267bc4fd48eacc784060144003781cf11cffdf608b66f611fb3be7"
+        },
+        {
+          "path": "unet-08.bin",
+          "bytes": 62935040,
+          "sha256": "1807ad7bb0e97787d81f5699b8c73f5b5c32e290e7845eb3aee008267ebbc266"
+        },
+        {
+          "path": "unet-09.bin",
+          "bytes": 62932480,
+          "sha256": "3ee2eb7144feecc6c81be82ea6dd8c5ee4db19a229d32003f5eb105177245571"
+        },
+        {
+          "path": "unet-10.bin",
+          "bytes": 62936320,
+          "sha256": "a521f022dfd65d847c2d1707efd79fb1bda562f23fe9dd87c82bc61ac2c4a436"
+        },
+        {
+          "path": "unet-11.bin",
+          "bytes": 19175680,
+          "sha256": "525d4fcb2118dc0e1be90db553e219197f7000956925f94f55373b4f2eaa261f"
+        }
+      ],
+      "operators": [
+        "Add",
+        "Cast",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Cos",
+        "Div",
+        "Equal",
+        "Erf",
+        "Expand",
+        "Gather",
+        "Gemm",
+        "InstanceNormalization",
+        "LayerNormalization",
+        "MatMul",
+        "Mul",
+        "Reshape",
+        "Resize",
+        "Shape",
+        "Sigmoid",
+        "Sin",
+        "Slice",
+        "Softmax",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "reference": {
+        "inputs": {
+          "sample": {
+            "path": "unet-sample.tensor",
+            "shape": [
+              1,
+              4,
+              32,
+              32
+            ],
+            "dtype": "float16"
+          },
+          "timestep": {
+            "path": "unet-timestep.tensor",
+            "shape": [
+              1
+            ],
+            "dtype": "float32"
+          },
+          "encoder_hidden_states": {
+            "path": "unet-encoder_hidden_states.tensor",
+            "shape": [
+              1,
+              77,
+              768
+            ],
+            "dtype": "float16"
+          }
+        },
+        "output": {
+          "path": "unet-expected.f32",
+          "shape": [
+            1,
+            4,
+            32,
+            32
+          ]
+        }
+      },
+      "precision": "fp16 weights and neural inputs; fp32 output"
+    },
+    "decoder": {
+      "graph": "decoder.onnx",
+      "files": [
+        {
+          "path": "decoder.onnx",
+          "bytes": 29068,
+          "sha256": "c4f4aa3fc9f9d2cb92f37497d3cd9e96a95ca48d58a181711215ccad716c53d3"
+        },
+        {
+          "path": "decoder-00.bin",
+          "bytes": 2441088,
+          "sha256": "67e1bcd20f0967d45e95d7abfa12fb54f74ea90bf40561f55a01592bd9b5ce43"
+        }
+      ],
+      "operators": [
+        "Add",
+        "Cast",
+        "Constant",
+        "Conv",
+        "Div",
+        "Mul",
+        "Relu",
+        "Resize",
+        "Sub",
+        "Tanh"
+      ],
+      "reference": {
+        "inputs": {
+          "latent": {
+            "path": "decoder-latent.tensor",
+            "shape": [
+              1,
+              4,
+              32,
+              32
+            ],
+            "dtype": "float16"
+          }
+        },
+        "output": {
+          "path": "decoder-expected.f32",
+          "shape": [
+            1,
+            3,
+            256,
+            256
+          ]
+        }
+      },
+      "precision": "fp16 weights and neural inputs; fp32 output"
+    }
+  },
+  "scheduler": "DPM-Solver++ 2M, midpoint, final sigma zero",
+  "guidance": 7.5,
+  "text_backend": "wasm",
+  "text_precision": "fp16",
+  "resolution": [
+    256,
+    384
+  ],
+  "safety_checker": false,
+  "execution": "browser only; no inference endpoint"
+}

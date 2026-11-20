@@ -4,7 +4,27 @@
 
 **O(n) Eyes**
 
-All six rows use the same 300 COCO val2017 captions and seeds at native 512 × 512 on an NVIDIA RTX 4050 Laptop GPU. CLIP similarity is the mean paired cosine of CLIP ViT-B/32 (0–1 scale). FID uses torch-fidelity Inception-v3 features against the 300 matched real images, center-cropped to 512 px. Latency is warm inference through raw decode. Peak memory lists PyTorch GPU allocations and host process RSS, both in MiB. Model size counts the offline weights and configuration used in each row. The public worker also runs the safety checker.
+## Current visitor-device browser pipeline
+
+[Live hosted app](https://on-eyes-device-lab-t38.brawnymoss1024.chatgpt.site) · [Source](https://github.com/solaxien/O-n-Eyes) · [Full browser evaluation](docs/BROWSER_ON_DEVICE.md)
+
+On the physical Poco F6, all neural inference and classical CV ran in Chrome on the phone. Each row below uses the same 16 prompts/seeds at native 256 px, displayed at 512 px. Timings are submit-to-visible after model initialization, with resident sessions. The metric order follows the supplied problem statement: CLIP, FID, latency, peak memory, model size, then quality versus computational cost.
+
+| Configuration | CLIP similarity ↑ | FID | Image generation latency p50 / p95 (s) | Observed peak Chrome PSS (MiB) | Model size (MiB) |
+| --- | ---: | --- | ---: | ---: | ---: |
+| Browser FP16 · 4 steps / 8 denoiser calls | 0.2853 | N/A, N=16 | 5.877 / 6.237 | 1,553 | 854.857 |
+| Browser FP16 · 6 steps / 12 calls | 0.3001 | N/A, N=16 | 7.744 / 7.848 | 2,372 | 854.857 |
+| Browser FP16 · 12 steps / 24 calls | 0.3053 | N/A, N=16 | 14.648 / 14.900 | 1,518 | 854.857 |
+
+**Quality versus computational cost:** six steps reduced median time by about 47% versus twelve, with CLIP lower by 0.00515. Exact composition was 0/16 in every row. Full CV slightly reduced CLIP versus raw output and did not repair missing objects or relations. FID is not validly estimated from this small composition diagnostic. A separate browser distribution study and unoptimized browser-model control are still needed.
+
+The six-step run includes initial session creation before its warm-up; the later step studies reused those sessions. Peak PSS covers all Chrome processes, including other tabs, and is not exact GPU allocation. The memory columns therefore do not establish a step-count memory advantage. Phone temperature and sequential run order are recorded. The initial six-step generation took 15.82 s. A separate offline reload/fresh-prompt test took 16.54 s with networks off, no ADB reverse path, zero server inference requests and 8,844 GPU dispatches. The initial public model-download network envelope was 771.79 s, separate from generation. These limits preclude an unconditional ten-second claim.
+
+The browser architecture, CV component ablation, failure images, source/image hashes, numerical probes and network evidence are in [the browser report](docs/BROWSER_ON_DEVICE.md) and [machine-readable results](docs/browser/evidence.json). The site is served by static CPU hosting; no T4 or external GPU is involved. The earlier laptop inference endpoint is not the current app.
+
+## Historical host evaluation
+
+All six rows use the same 300 COCO val2017 captions and seeds at native 512 × 512 on an NVIDIA RTX 4050 Laptop GPU. Latency is warm inference through raw decode. Peak memory lists PyTorch GPU allocations and host process RSS, both in MiB. Model size counts the offline weights and configuration used in each row. The public worker also runs the safety checker.
 
 | Configuration | CLIP similarity ↑ | FID ↓ (N = 300) | Image generation latency p50 / p95 (s) | Peak memory GPU / RSS (MiB) | Model size (MiB) |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -31,4 +51,10 @@ The separate ARM CPU comparison ran 12 native 256 px renders on the Poco F6. SD 
 
 The tables above report the original RTX 4050 and two-prompt phone experiments as measured. The first native phone exports used the base model; the revised exporter fuses and verifies the trained LoRA, and expanded host and phone measurements with the adapted export are reported in [review results](docs/REVIEW_RESULTS.md). Native phone timings cover inference through decode and exclude laptop-side resizing, quality checks, optional CV and scoring.
 
-A sixteen-frame visual audit separates genuine generation failures from a crop-colour scoring disagreement; CLIP alone does not show that every composition clause is satisfied. [Sixteen-frame audit](docs/SEMANTIC_AUDIT.md)
+The original native exports contained the **base model without the trained LoRA**. Native phone timings exclude laptop-side resizing, QA, optional CV and scoring. The revised exporter now fuses and verifies the adapter, with separate device validation. New host and expanded phone measurements, scorer diagnostics, recovery tests and deployment limitations are reported in [review results](docs/REVIEW_RESULTS.md). They do not replace the original 300-image COCO scores.
+
+The visual audit identifies both genuine generation failures and a crop-color scoring disagreement. CLIP is not evidence that all composition clauses are satisfied. [Sixteen-frame audit](docs/SEMANTIC_AUDIT.md)
+
+No NVIDIA T4 or external GPU was used for this review, as requested by the user. Permanent public hosting and Docker runtime validation remain pending. The earlier temporary URL is not a guarantee of current availability.
+
+The earlier temporary URL passed six public desktop/phone-width requests in 0.76–2.28 seconds on 7 November. A separate Chrome check on the physical Poco F6 displayed a 512 px image in 2.42 seconds with no page overflow. Inference ran on the laptop GPU. Those historical results are preserved; the temporary GPU-backed service has been replaced by the visitor-device browser app linked above.

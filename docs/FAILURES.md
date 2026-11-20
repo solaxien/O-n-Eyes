@@ -1,5 +1,7 @@
 # P3 Failure Case Analysis
 
+The browser implementation has its own [failure analysis and images](BROWSER_ON_DEVICE.md). It successfully generates offline on the Poco F6, yet all 16 multi-object prompts fail exact composition at 4, 6 and 12 steps. A 384 px render is sharper but omits the blue cup. Pixel QA passes many semantically wrong images. Bilateral CV does not fix missing objects and slightly reduces measured alignment. The GPU text encoder's late-token discrepancy required a local WASM fallback; denoiser numerical differences remain unresolved. Cold start, a roughly 900 MB download, browser storage limits and unvalidated devices are additional practical failures to address.
+
 The review expands this analysis to [all sixteen historical composition frames](SEMANTIC_AUDIT.md), including a concrete crop-color scorer disagreement. [New phone and host results](REVIEW_RESULTS.md) retain exact and per-clause outcomes separately from CLIP.
 
 New regression checks reproduce corrupt image reuse, protocol mixing, stale scores, interrupted JSON, and concurrent-writer hazards. The fixes preserve old experiments and require new identities for changed settings. A real Windows file-sharing error during the expanded phone control led to a bounded atomic-replace retry and fewer metadata writes. That interrupted control is retained separately. [Recovery details](REPRODUCIBILITY.md)

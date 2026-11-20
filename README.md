@@ -2,13 +2,25 @@
 
 **O(n) Eyes · Team T38**
 
-P3 Image Lab runs a compact pretrained text-to-image diffusion model in a worker we control. The browser presents the raw VAE decode, the result after classical CV, and measured baseline comparisons. The Android benchmark runs the model directly on a Poco F6.
+P3 Image Lab now runs the adapted diffusion model **in the visitor's browser**. Prompt encoding, WebGPU generation, decoding, resizing and classical CV all stay on that device. The website serves static assets and has no inference API.
 
-The refreshed demo uses this laptop's RTX 4050 through a temporary HTTPS tunnel. Six public browser checks on 7 November took 0.76–2.28 seconds; a separate check in Chrome on the physical Poco F6 displayed a 512 px image in 2.42 seconds. It stays available only while the laptop, model worker and tunnel are online. [Open P3 Image Lab](https://holland-comedy-screensavers-rare.trycloudflare.com) · [Latest review](https://holland-comedy-screensavers-rare.trycloudflare.com/review.html)
+[Open the on-device app](https://on-eyes-device-lab-t38.brawnymoss1024.chatgpt.site) · [Browser measurements, architecture and limitations](docs/BROWSER_ON_DEVICE.md) · [Model release](https://github.com/solaxien/O-n-Eyes/releases/tag/browser-models-v3)
 
-The implementation review adds strict benchmark provenance, verified adapter-aware native export, expanded device diagnostics, and a manual composition audit. Historical measurements remain intact. [Review results and limitations](docs/REVIEW_RESULTS.md) · [Reproduction protocol](docs/REPRODUCIBILITY.md) · [Deployment](docs/DEPLOYMENT.md)
+The physical Poco F6 generated a fresh image after an offline page reload with Wi-Fi and mobile data disabled. Six-step repeat generation had a 7.744 s median with models kept loaded; its initial load/generation took 15.82 s. The 896 MB model download is additional. This is a working research prototype: exact multi-object composition remained 0/16, and the first download, cold initialization and slow detail mode do not meet ten seconds. Supported WebGPU/FP16 browsers and sufficient storage are required.
 
-## Run the web demo
+## Run the on-device web app
+
+The host below only serves files; it needs no GPU. The visitor's device performs generation.
+
+```sh
+docker build -f Dockerfile.device -t p3-device . && docker run --rm -p 7860:7860 p3-device
+```
+
+Open `http://localhost:7860` on that computer, or use the public HTTPS app from a phone. Docker runtime validation is pending because Docker is unavailable on the development laptop. The plain Node build and Python static server have been exercised. [Setup, source export, device tests and scoring](docs/BROWSER_ON_DEVICE.md#reproduce)
+
+The original host/native implementation and all historical measurements remain intact. They are separate experiments, not browser benchmark results. [Review](docs/REVIEW_RESULTS.md) · [Reproduction protocol](docs/REPRODUCIBILITY.md) · [Deployment](docs/DEPLOYMENT.md)
+
+## Archived host-based demo
 
 On a Linux machine with Docker, an NVIDIA driver, and the NVIDIA Container Toolkit, use this command.
 
@@ -85,4 +97,4 @@ The same generation and scoring commands accept `data/composition.jsonl` for a s
 - [Visual composition audit](docs/SEMANTIC_AUDIT.md)
 - [Mobile feasibility](docs/MOBILE_FEASIBILITY.md)
 
-The weights remain under their upstream licenses. The worker downloads only the required files and retains the checkpoints' safety checker. [SD v1.4](https://huggingface.co/CompVis/stable-diffusion-v1-4), [BK-SDM-Tiny-2M](https://huggingface.co/nota-ai/bk-sdm-tiny-2m)
+The weights remain under their upstream licenses. The archived host worker retains the checkpoints' safety checker; the browser export omits that classifier. Pixel QA is not a safety classifier. [Model use terms](browser/src/MODEL-LICENSE.txt) · [Attribution](browser/src/ATTRIBUTION.txt) · [SD v1.4](https://huggingface.co/CompVis/stable-diffusion-v1-4) · [BK-SDM-Tiny-2M](https://huggingface.co/nota-ai/bk-sdm-tiny-2m)

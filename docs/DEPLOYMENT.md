@@ -1,6 +1,14 @@
 # Deployment and availability
 
-The working application is a FastAPI service with one resident diffusion worker. Phone browsers use the server's GPU. Native phone inference is a separate benchmark executable.
+The current [public app](https://on-eyes-device-lab-t38.brawnymoss1024.chatgpt.site) uses static hosting. Prompt encoding, generation and CV run in the visitor's browser. Its Cloudflare Worker embeds the small application/tokenizer assets and streams pinned model/runtime binaries from the [licensed GitHub release](https://github.com/solaxien/O-n-Eyes/releases/tag/browser-models-v3). It accepts only static GET/HEAD routes and rejects inference requests. No external GPU host or laptop inference service is required. [Device validation and local setup](BROWSER_ON_DEVICE.md)
+
+The Sites identity is preserved in `deploy/browser-hosting.json`. The owning account can rebuild `browser/dist`, copy that manifest to an empty checkout's `.openai/hosting.json`, run `scripts/package_browser_site.mjs <checkout>`, and use the Sites source/version workflow with a fresh credential for that same project ID. Credentials are never stored in the repository. The generated Worker streams large files instead of buffering them in its 128 MB isolate. Public model files are checksum-checked on the visitor's device. The application itself contains no inference network path.
+
+`Dockerfile.device` supplies a CPU-only static host and remote asset proxy. The Node build and Python host were exercised locally; Docker execution remains unverified because Docker is unavailable on this laptop. First model download, service-worker setup and model loading are separate costs. Offline operation depends on the browser retaining its caches; the host does not guarantee cache persistence.
+
+## Historical GPU service
+
+The earlier application is a FastAPI service with one resident diffusion worker. Phone browsers used the laptop GPU. Native phone inference was a separate benchmark executable. These paths and their evidence remain available for research reproduction.
 
 The earlier `trycloudflare.com` URL was a temporary session. It depends on the laptop and tunnel and is not an always-on submission deployment. Its prior browser timings remain evidence of those requests, not a current uptime guarantee.
 
