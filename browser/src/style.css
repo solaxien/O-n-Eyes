@@ -571,3 +571,14 @@ footer {
   content: "?";
   color: #9aa5a5;
 }
+
+.cv-detail {
+  margin: 0.6rem 0;
+}
+.cv-detail summary {
+  cursor: pointer;
+  color: #a3eed6;
+}
+.cv-detail .check-list {
+  margin-top: 0.5rem;
+}

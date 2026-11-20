@@ -456,6 +456,10 @@ self.onmessage = async ({ data }) => {
         after: cv.after,
         artifact_fraction: cv.artifact_fraction,
         quality: cv.quality,
+        stages: cv.stages,
+        artifact_checks: cv.artifacts,
+        total_ms: cv.total_ms,
+        reverted_to_raw: Boolean(cv.reverted),
         enhancement_difference: {
           changed_pixels: enhancementDifference.changed_pixels,
           changed_fraction: enhancementDifference.changed_fraction,
@@ -470,7 +474,7 @@ self.onmessage = async ({ data }) => {
     const variants = {};
     if (data.cvStudy) {
       metadata.cv_study = {};
-      for (const component of ["repair", "edges", "color"]) {
+      for (const component of ["repair", "exposure", "edges", "color"]) {
         const begin = performance.now(),
           variant = enhance(pixels, profile.size, profile.size, [component]),
           difference = differenceMap(cv.pixels, variant.pixels);

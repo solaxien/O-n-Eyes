@@ -189,12 +189,113 @@ function inspect(rgb, width, height) {
     },
   };
 }
+const now = () => (globalThis.performance ? performance.now() : Date.now());
+
+function changedPixels(before, after) {
+  let changed = 0;
+  for (let i = 0; i < before.length; i += 4)
+    if (before[i] !== after[i] || before[i + 1] !== after[i + 1] || before[i + 2] !== after[i + 2]) changed++;
+  return changed;
+}
+
+/**
+ * Detect common decode defects on the raw image. Each check states its
+ * threshold and what the pipeline does about it, including "nothing" when a
+ * defect cannot be fixed with classical processing.
+ */
+export function artifactReport(raw, width, height, inspected = inspect(raw, width, height)) {
+  const { gray, metrics } = inspected,
+    count = width * height;
+  let highlights = 0,
+    shadows = 0,
+    luminance = 0,
+    castN = 0,
+    castRG = 0,
+    castBG = 0;
+  for (let i = 0; i < count; i++) {
+    const v = gray[i];
+    luminance += v;
+    if (v > 250) highlights++;
+    if (v < 5) shadows++;
+    const r = raw[i * 4],
+      g = raw[i * 4 + 1],
+      b = raw[i * 4 + 2];
+    if (v > 45 && v < 215 && Math.max(r, g, b) - Math.min(r, g, b) < 40) {
+      castN++;
+      castRG += r - g;
+      castBG += b - g;
+    }
+  }
+  // Decoder grid: TAESD/VAE seams show as stronger steps every 8 pixels.
+  let onGrid = 0,
+    offGrid = 0,
+    onN = 0,
+    offN = 0;
+  for (let y = 1; y < height; y++)
+    for (let x = 1; x < width; x++) {
+      const i = y * width + x,
+        step = Math.abs(gray[i] - gray[i - 1]) + Math.abs(gray[i] - gray[i - width]);
+      if (x % 8 === 0 || y % 8 === 0) {
+        onGrid += step;
+        onN++;
+      } else {
+        offGrid += step;
+        offN++;
+      }
+    }
+  const gridRatio = offGrid > 0 ? onGrid / onN / (offGrid / offN) : 1,
+    castMagnitude = castN > count * 0.05 ? Math.hypot(castRG / castN, castBG / castN) : 0,
+    mean = luminance / count;
+  const check = (name, value, threshold, flagged, action) => ({
+    name,
+    value: Number(value.toFixed(4)),
+    threshold,
+    flagged,
+    action,
+  });
+  return {
+    checks: [
+      check("blur (Laplacian variance)", metrics.laplacian_variance, "< 60 is soft", metrics.laplacian_variance < 60,
+        "Not fixable by classical filtering; Balanced or more steps is the remedy."),
+      check("exposure (mean luminance)", mean, "outside 70 to 185", mean < 70 || mean > 185,
+        "Bounded gamma correction in the exposure stage."),
+      check("clipped highlights", highlights / count, "> 0.05", highlights / count > 0.05,
+        "Reported; later stages are blocked from increasing clipping."),
+      check("crushed shadows", shadows / count, "> 0.05", shadows / count > 0.05,
+        "Reported; later stages are blocked from increasing clipping."),
+      check("colour cast (RGB offset on near-neutral pixels)", castMagnitude, "> 6 levels", castMagnitude > 6,
+        "Bounded neutral colour balance."),
+      check("decoder grid (8 px seam ratio)", gridRatio, "> 1.3", gridRatio > 1.3,
+        "Reported only; no dedicated correction."),
+    ],
+    flagged: 0,
+  };
+}
+
+function exposureGamma(mean) {
+  if (mean < 70) return Math.max(0.75, Math.log(100 / 255) / Math.log(Math.max(1, mean) / 255));
+  if (mean > 185) return Math.min(1.3, Math.log(160 / 255) / Math.log(mean / 255));
+  return 1;
+}
+
 export function enhance(raw, width, height, omit = []) {
-  const before = inspect(raw, width, height),
+  const started = now(),
+    before = inspect(raw, width, height),
     pixels = new Uint8ClampedArray(raw),
     mask = new Uint8Array(width * height),
-    medians = new Float32Array(width * height);
-  let artifacts = 0;
+    stages = [],
+    record = (stage, status, reason, ms = 0, snapshot = null) =>
+      stages.push({
+        stage,
+        status,
+        reason,
+        ms: Number(ms.toFixed(2)),
+        changed_pixels: snapshot ? changedPixels(snapshot, pixels) : 0,
+      });
+  const artifacts_report = artifactReport(raw, width, height, before);
+  artifacts_report.flagged = artifacts_report.checks.filter((c) => c.flagged).length;
+  let artifacts = 0,
+    tick = now();
   for (let y = 1; y < height - 1; y++)
     for (let x = 1; x < width - 1; x++) {
       const i = y * width + x,
@@ -204,7 +305,6 @@ export function enhance(raw, width, height, omit = []) {
           values.push(before.gray[i + dy * width + dx]);
       values.sort((a, b) => a - b);
       const median = values[4];
-      medians[i] = median;
       // Isolated outliers only; preserve structured edges and clustered defects.
       const span = values[7] - values[1];
       if (Math.abs(before.gray[i] - median) >= 48 && span < 24) {
@@ -213,22 +313,37 @@ export function enhance(raw, width, height, omit = []) {
       }
     }
   const fraction = artifacts / (width * height),
-    usable = before.metrics.luminance_span >= 8 && fraction <= 0.035;
-  if (!usable && !omit.includes("gate"))
-    return {
-      pixels,
-      applied: ["Pixel quality gate flagged decode"],
-      before: before.metrics,
-      after: before.metrics,
-      artifact_fraction: fraction,
-      quality: {
-        before: qualityAssessment(before.metrics, fraction),
-        after: qualityAssessment(before.metrics, fraction),
-      },
-      usable: false,
-    };
+    usable = before.metrics.luminance_span >= 8 && fraction <= 0.035,
+    detectMs = now() - tick;
+  const result = (out, applied, after, extra = {}) => ({
+    pixels: out,
+    applied,
+    before: before.metrics,
+    after: after.metrics,
+    artifact_fraction: fraction,
+    quality: {
+      before: qualityAssessment(before.metrics, fraction),
+      after: qualityAssessment(after.metrics, fraction),
+    },
+    usable,
+    stages,
+    artifacts: artifacts_report,
+    total_ms: Number((now() - started).toFixed(2)),
+    ...extra,
+  });
+  if (!usable && !omit.includes("gate")) {
+    record("gate", "applied", "Decode failed the pixel gate (flat image or too many outliers); raw pixels kept.", detectMs);
+    return result(pixels, ["Pixel quality gate flagged decode"], before);
+  }
   const applied = [];
-  if (artifacts && fraction <= 0.004 && !omit.includes("repair")) {
+  // Stage 1: isolated speckle repair.
+  if (omit.includes("repair")) record("repair", "omitted", "Omitted for ablation.");
+  else if (!artifacts) record("repair", "skipped", "No isolated speckles were found.", detectMs);
+  else if (fraction > 0.004)
+    record("repair", "skipped", "Too many outliers to treat as speckles; they are likely texture.", detectMs);
+  else {
+    const snapshot = new Uint8ClampedArray(pixels);
+    tick = now();
     for (let i = 0; i < mask.length; i++)
       if (mask[i])
         for (let c = 0; c < 3; c++) {
@@ -240,9 +355,33 @@ export function enhance(raw, width, height, omit = []) {
           pixels[i * 4 + c] = Math.round((a[3] + a[4]) / 2);
         }
     applied.push("Isolated speckle correction");
+    record("repair", "applied", `${artifacts} isolated speckles replaced by their neighbourhood median.`, detectMs + now() - tick, snapshot);
   }
-  if (!omit.includes("edges")) {
+  // Stage 2: exposure (brightness) correction with a bounded gamma.
+  let gateBase = before;
+  const mean = before.gray.reduce((s, v) => s + v, 0) / before.gray.length,
+    gamma = exposureGamma(mean);
+  if (omit.includes("exposure")) record("exposure", "omitted", "Omitted for ablation.");
+  else if (Math.abs(gamma - 1) < 0.02 || before.metrics.luminance_span < 40)
+    record("exposure", "skipped", `Mean luminance ${mean.toFixed(0)} is within 70 to 185, so brightness was left unchanged.`);
+  else {
+    const snapshot = new Uint8ClampedArray(pixels),
+      lut = new Uint8ClampedArray(256);
+    tick = now();
+    for (let v = 0; v < 256; v++) lut[v] = clamp(255 * (v / 255) ** gamma);
+    for (let i = 0; i < pixels.length; i += 4)
+      for (let c = 0; c < 3; c++) pixels[i + c] = lut[pixels[i + c]];
+    applied.push("Exposure correction");
+    // Brightening legitimately raises gradient sizes, so later edge-safety
+    // checks compare against the exposure-corrected image.
+    gateBase = inspect(pixels, width, height);
+    record("exposure", "applied", `Mean luminance ${mean.toFixed(0)}; gamma ${gamma.toFixed(2)} applied equally to all channels so hues are kept.`, now() - tick, snapshot);
+  }
+  // Stage 3: edge-aware bilateral detail recovery.
+  if (omit.includes("edges")) record("edges", "omitted", "Omitted for ablation.");
+  else {
     const source = new Uint8ClampedArray(pixels);
+    tick = now();
     for (let y = 1; y < height - 1; y++)
       for (let x = 1; x < width - 1; x++) {
         const i = y * width + x;
@@ -268,8 +407,13 @@ export function enhance(raw, width, height, omit = []) {
           pixels[i * 4 + c] = clamp(source[i * 4 + c] + change);
       }
     applied.push("Edge-aware bilateral detail recovery");
+    record("edges", "applied", "Bilateral base layer separates edges from flat areas; bounded detail is added back.", now() - tick, source);
   }
-  if (!omit.includes("color")) {
+  // Stage 4: neutral colour balance and bounded contrast.
+  if (omit.includes("color")) record("color", "omitted", "Omitted for ablation.");
+  else {
+    const snapshot = new Uint8ClampedArray(pixels);
+    tick = now();
     let neutral = 0,
       means = [0, 0, 0];
     for (let i = 0; i < pixels.length; i += 4) {
@@ -280,6 +424,7 @@ export function enhance(raw, width, height, omit = []) {
         for (let c = 0; c < 3; c++) means[c] += rgb[c] - l;
       }
     }
+    const reasons = [];
     if (neutral / (width * height) >= 0.35) {
       means = means.map((x) => Math.max(-3, Math.min(3, (x / neutral) * 0.35)));
       if (Math.max(...means.map(Math.abs)) >= 1) {
@@ -287,51 +432,36 @@ export function enhance(raw, width, height, omit = []) {
           for (let c = 0; c < 3; c++)
             pixels[i + c] = clamp(pixels[i + c] - means[c]);
         applied.push("Conservative neutral colour balance");
-      }
-    }
+        reasons.push("neutral colour cast reduced");
+      } else reasons.push("no measurable colour cast");
+    } else reasons.push("too few neutral pixels to estimate a cast safely");
     if (before.metrics.contrast >= 12 && before.metrics.contrast < 55) {
       for (let i = 0; i < pixels.length; i += 4)
         for (let c = 0; c < 3; c++)
           pixels[i + c] = clamp(128 + (pixels[i + c] - 128) * 1.035);
       applied.push("Bounded contrast correction");
-    }
+      reasons.push("low contrast stretched by 3.5%");
+    } else
+      reasons.push(before.metrics.contrast < 12 ? "image too flat to stretch safely" : "contrast already adequate");
+    const changed = changedPixels(snapshot, pixels) > 0;
+    record("color", changed ? "applied" : "skipped", reasons.join("; ") + ".", now() - tick, snapshot);
   }
   const after = inspect(pixels, width, height);
   if (
     !omit.includes("gate") &&
     (after.metrics.clipped_fraction > before.metrics.clipped_fraction + 0.025 ||
-      (before.metrics.edges > 100 &&
-        (after.metrics.edges < before.metrics.edges * 0.72 ||
+      (gateBase.metrics.edges > 100 &&
+        (after.metrics.edges < gateBase.metrics.edges * 0.72 ||
           // Detail recovery can legitimately cross the older 1.65× edge
           // ceiling on textured images; retain a safety ceiling for clearly
           // over-sharpened output without discarding useful enhancement.
-          after.metrics.edges > before.metrics.edges * 2.0)))
+          after.metrics.edges > gateBase.metrics.edges * 2.0)))
   ) {
-    return {
-      pixels: new Uint8ClampedArray(raw),
-      applied: ["Quality gate retained raw pixels"],
-      before: before.metrics,
-      after: before.metrics,
-      artifact_fraction: fraction,
-      quality: {
-        before: qualityAssessment(before.metrics, fraction),
-        after: qualityAssessment(before.metrics, fraction),
-      },
-      usable,
-    };
+    record("gate", "applied", "Enhancement increased clipping or changed edges too much, so the raw pixels were kept.");
+    return result(new Uint8ClampedArray(raw), ["Quality gate retained raw pixels"], before, { reverted: true });
   }
-  return {
-    pixels,
-    applied,
-    before: before.metrics,
-    after: after.metrics,
-    artifact_fraction: fraction,
-    quality: {
-      before: qualityAssessment(before.metrics, fraction),
-      after: qualityAssessment(after.metrics, fraction),
-    },
-    usable,
-  };
+  record("gate", omit.includes("gate") ? "omitted" : "skipped", omit.includes("gate") ? "Omitted for ablation." : "Enhanced image passed the accept-or-revert check.");
+  return result(pixels, applied, after);
 }
 export async function png(pixels, width, height, display = 512) {
   const source = new OffscreenCanvas(width, height);

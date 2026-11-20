@@ -189,3 +189,50 @@ test(
     }
   },
 );
+
+import { artifactReport, enhance } from "../src/vision.js";
+function textured(size, base, cast = [0, 0, 0]) {
+  const out = new Uint8ClampedArray(size * size * 4);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4,
+        v = base + Math.round((x + y) / 4) + ((x * 3 + y) % 3) + (x > size / 2 ? 25 : 0);
+      out[i] = v + cast[0];
+      out[i + 1] = v + cast[1];
+      out[i + 2] = v + cast[2];
+      out[i + 3] = 255;
+    }
+  return out;
+}
+
+test("Exposure stage brightens a dark decode with one gamma for all channels", () => {
+  const raw = textured(64, 20),
+    result = enhance(raw, 64, 64),
+    exposure = result.stages.find((s) => s.stage === "exposure");
+  assert.equal(exposure.status, "applied");
+  assert.ok(exposure.changed_pixels > 0);
+  const mean = (p) => p.reduce((s, v, i) => (i % 4 === 3 ? s : s + v), 0) / (p.length * 0.75);
+  assert.ok(mean(result.pixels) > mean(raw) + 15);
+  assert.ok(result.artifacts.checks.find((c) => c.name.startsWith("exposure")).flagged);
+});
+
+test("Well-exposed images record why each stage was skipped", () => {
+  const result = enhance(textured(64, 110), 64, 64),
+    byName = Object.fromEntries(result.stages.map((s) => [s.stage, s]));
+  assert.equal(byName.exposure.status, "skipped");
+  assert.match(byName.exposure.reason, /within 70 to 185/);
+  assert.equal(byName.repair.status, "skipped");
+  assert.ok(["applied", "skipped"].includes(byName.gate.status));
+  for (const stage of result.stages) assert.ok(stage.reason.length > 10, stage.stage);
+});
+
+test("Artifact report flags a colour cast and an 8-pixel decoder grid", () => {
+  const size = 64,
+    cast = textured(size, 100, [18, 0, -10]);
+  assert.ok(artifactReport(cast, size, size).checks.find((c) => c.name.startsWith("colour cast")).flagged);
+  const grid = textured(size, 100);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x += 8) grid.fill(30, (y * size + x) * 4, (y * size + x) * 4 + 3);
+  assert.ok(artifactReport(grid, size, size).checks.find((c) => c.name.startsWith("decoder grid")).flagged);
+  assert.equal(artifactReport(textured(size, 100), size, size).checks.find((c) => c.name.startsWith("decoder grid")).flagged, false);
+});

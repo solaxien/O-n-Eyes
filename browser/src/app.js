@@ -297,6 +297,7 @@ function renderCvStudy(result) {
   if (!variants.length) return;
   const labels = {
     "omit-repair": "Without speckle repair",
+    "omit-exposure": "Without exposure correction",
     "omit-edges": "Without edge-aware filtering",
     "omit-color": "Without colour correction",
   };
@@ -451,11 +452,41 @@ function renderInsights(result) {
     );
   const caveat = appendText(evidence, plan.verification);
   caveat.className = "muted";
+  renderCvStages(cv);
   renderVerifier(metadata);
   renderCandidates(metadata);
   renderCvStudy(result);
 }
 
+const STAGE_NAMES = {
+  repair: "Speckle repair",
+  exposure: "Exposure",
+  edges: "Edge-aware detail",
+  color: "Colour and contrast",
+  gate: "Accept-or-revert gate",
+};
+function renderCvStages(cv) {
+  const stagesList = $("cv-stages"),
+    artifactList = $("cv-artifacts");
+  stagesList.replaceChildren();
+  artifactList.replaceChildren();
+  for (const stage of cv.stages || []) {
+    const item = appendText(
+      stagesList,
+      `${STAGE_NAMES[stage.stage] || stage.stage}: ${stage.status}. ${stage.reason}${stage.changed_pixels ? ` ${stage.changed_pixels} pixels changed in ${stage.ms} ms.` : ""}`,
+      "li",
+    );
+    item.className = "check " + (stage.status === "applied" ? "pass" : "not_verifiable");
+  }
+  for (const check of cv.artifact_checks?.checks || []) {
+    const item = appendText(
+      artifactList,
+      `${check.name}: ${check.value} (flag if ${check.threshold}). ${check.flagged ? check.action : "Not flagged."}`,
+      "li",
+    );
+    item.className = "check " + (check.flagged ? "fail" : "pass");
+  }
+}
 const STATUS_TEXT = { pass: "Passed", fail: "Failed", not_verifiable: "Not verifiable here" };
 function renderVerifier(metadata) {
   const list = $("verifier-checks"),
