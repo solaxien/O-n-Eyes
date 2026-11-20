@@ -1,17 +1,17 @@
 # Handoff: v2 improvement plan
 
-Branch: `v2-verifier`, built on `v2`. This file says what was changed, what was verified, and the exact steps only the team can do (the phone, the laptop GPU, the GitHub release and the deployment).
+Branch: `v2-verifier`, built on `v2`. This file says what was changed, what was verified, and the exact steps only the team can do (the phone, the GitHub release and the deployment).
 
 ## 1. Status by phase
 
 | Phase | Code | Verified here | Team still needs to |
 | --- | --- | --- | --- |
-| 1. Trusted baseline | `scripts/run_phase1.ps1`, `scripts/run_gpu_quality.ps1`, `scripts/phase1_report.py`, browser-matched GPU variants, KID | Report generator and KID unit-tested | Run both scripts and paste the table into `eval_P3_T38.md` |
+| 1. Trusted baseline | `scripts/run_phase1.ps1` and `scripts/phase1_report.py` | Report generator and KID unit-tested | Run the phone study and paste the table into `eval_P3_T38.md` |
 | 2. On-device verifier | `browser/src/verifier.js`, worker integration, UI checks | 32 browser tests; JS detector output matches Python ONNX on two real phone images | Upload the detector file (step 2), time it on the phone |
 | 3. Retry and selection | `browser/src/selection.js`, candidate loop in `app.js`, timeline UI | Policy tests | Run `-SelectionStudy` to show the gain on the offline scorer |
 | 4. INT8 | `p3/quantize_browser.py` | Toy-model test (MatMulNBits, sharding, agreement report) | Run on the real export, test desktop WebGPU, then the phone; keep or reject |
 | 5. Classical CV evidence | Exposure stage, per-stage reasons and timing, defect report, offline BRISQUE | Unit tests; BRISQUE smoke test | Run `scripts/offline_iqa.py` (included in the Phase 1 script) |
-| 6. Android hardening | Readiness report, simulated budgets, collapsible sections, installable app | Planner and readiness tests; every UI element id checked | Physical checks in step 6 |
+| 6. Android hardening | Readiness report, simulated budgets, collapsible sections, installable app | Planner and readiness tests; every UI element id checked | Physical checks in step 5 |
 
 Not delivered: an on-device image-text alignment model (no compact CLIP-style model could be fetched in the build environment). The verifier reports alignment as not bundled.
 
@@ -47,15 +47,7 @@ powershell -ExecutionPolicy Bypass -File scripts\run_phase1.ps1 -Origin <https-o
 
 Output: `report/phase1-results.md` (the table for `eval_P3_T38.md`), `cost.json`, `scores.json` per run, `iqa-*.json`, and a selection study. Expect roughly 30 to 60 minutes. Once the new table is in the eval file, delete the two "historical v3" banners in `eval_P3_T38.md` and `docs/BROWSER_ON_DEVICE.md`.
 
-## 5. Distribution quality (laptop GPU)
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\run_gpu_quality.ps1 -Count 1000
-```
-
-Then rerun `scripts/phase1_report.py` with `--gpu` pairs to add the CLIP, KID and FID table. State in the eval file that these images come from the laptop GPU with the same weights, steps and resolution as the phone.
-
-## 6. Physical Android checks to record
+## 5. Physical Android checks to record
 
 - Offline reload and generation with Wi-Fi and data off.
 - Storage eviction: clear site data, confirm Prepare repairs the cache.
@@ -64,7 +56,7 @@ Then rerun `scripts/phase1_report.py` with `--gpu` pairs to add the CLIP, KID an
 - Device budget menu: "Simulate a 4 GB phone" shows a lighter Auto plan; "Simulate a memory failure" shows the fallback chain in the run report.
 - Install to home screen and open offline.
 
-## 7. INT8 experiment (optional)
+## 6. INT8 experiment (optional)
 
 ```sh
 pip install -r requirements-web-export.txt
@@ -73,7 +65,7 @@ python -m p3.quantize_browser --export .models/browser/v3 --out .models/browser/
 
 Read `quantize-report.json` (size and agreement). Build with `P3_BROWSER_MODELS=.models/browser/v3-int8`, test on desktop WebGPU, then the phone. Keep it only if WebGPU runs `MatMulNBits` correctly and storage or memory improves without a visible quality loss. Either outcome goes in the eval file.
 
-## 8. Demo script (3 minutes)
+## 7. Demo script (3 minutes)
 
 1. Open the app on the phone, show the readiness report.
 2. Switch on airplane mode.
@@ -82,7 +74,7 @@ Read `quantize-report.json` (size and agreement). Build with `P3_BROWSER_MODELS=
 5. Set Device budget to "Simulate a memory failure" and generate; show the fallback in the run report.
 6. Open the Optimization lab: 20-step reference versus the selected profile, same prompt and seed.
 
-## 9. Tests
+## 8. Tests
 
 - Browser: `cd browser && npm test` (32 tests; the parity test runs when `P3_VERIFIER_MODEL` is set).
 - Python: `python -m unittest discover -s tests` (24 tests; needs PyTorch and the packages in CI).

@@ -38,7 +38,7 @@ Source map: `browser/src/worker.js` (generation pipeline), `resources.js` (plann
 
 | Strategy | Where | Evidence |
 | --- | --- | --- |
-| Lightweight architecture (Tiny U-Net) | Model choice | Historical RTX study; GPU variants in `p3/benchmark.py` |
+| Lightweight architecture (Tiny U-Net) | Model choice | Historical model comparison |
 | Reduced precision (FP16) | Export | Historical FP32 vs FP16 study |
 | Fewer sampling steps (20, 12, 6, 4) with DPM-Solver++ | `resources.js` profiles | Phase 1 phone run |
 | Lightweight decoder (TAESD) | Export | Historical study |
@@ -69,8 +69,6 @@ Each stage records whether it ran, why it was skipped, its time and how many pix
 ## 8. Evaluation protocol
 
 - **Phone:** `scripts/run_phase1.ps1` runs the 20-step reference, Balanced, Eco and Preview on the same 20 prompts and seeds, with models kept loaded and a warm-up, then imports the images, scores them offline and writes the report table with file hashes.
-- **Distribution quality:** `scripts/run_gpu_quality.ps1` generates 1,000 COCO captions on the laptop GPU with the same weights, steps and resolution, and reports CLIP, KID (primary at this size) and FID.
-- Phone timings and GPU quality numbers are reported separately and never mixed.
 
 ## 9. Limitations
 

@@ -40,6 +40,8 @@ def _generated_image(root: Path, sample: dict, *, allow_legacy=False) -> Path | 
 
 class Alignment:
     def __init__(self, device: str, with_detector: bool):
+        if device != "cpu":
+            raise ValueError("Offline scoring uses the CPU.")
         self.device = device
         self.clip_processor = CLIPProcessor.from_pretrained(CLIP, revision=CLIP_REVISION, token=False)
         self.clip = CLIPModel.from_pretrained(
@@ -131,6 +133,8 @@ def frechet_distance(first: np.ndarray, second: np.ndarray) -> float:
 
 @torch.inference_mode()
 def score_runs(manifest: Path, runs: list[Path], device: str, fid: bool, *, allow_legacy=False):
+    if device != "cpu":
+        raise ValueError("Offline scoring uses the CPU.")
     if len(set(path.resolve() for path in runs)) != len(runs):
         raise ValueError("Specify each run only once")
     with ExitStack() as stack:

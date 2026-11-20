@@ -103,7 +103,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out',type=Path,default=Path('.models/browser/v1'))
     parser.add_argument('--component',choices=['text','unet','decoder','all'],default='all')
-    parser.add_argument('--device',choices=['cpu','cuda'],default='cpu')
+    parser.add_argument('--device',choices=['cpu'],default='cpu')
     parser.add_argument('--text-precision',choices=['fp16','mixed-fp32'],default='fp16')
     parser.add_argument('--adapter',type=Path,default=Path('p3/weights/t38-coco.safetensors'),
                         help='Trained LoRA adapter fused into the browser denoiser.')
@@ -164,8 +164,6 @@ def execute(args):
                 {'sample':{2:'height',3:'width'},'output':{2:'height',3:'width'}})
         del model
         gc.collect()
-        if device=='cuda':
-            torch.cuda.empty_cache()
     for name in ['vocab.json','merges.txt','tokenizer_config.json']:
         shutil.copyfile(model_dir/'tokenizer'/name,args.out/name)
     tests = ['','A red apple beside a blue cup.','Two yellow bananas, left of one apple.','A café with three chairs.']

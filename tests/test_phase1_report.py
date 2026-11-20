@@ -28,7 +28,7 @@ class Phase1ReportTests(unittest.TestCase):
                 "clip_mean": 0.3001, "composition_pass": 0.1, "composition_n": 19, "not_verifiable_clauses": 19,
                 "clauses": {"count": {"passed": 5, "total": 36}, "color": {"passed": 3, "total": 31},
                             "position": {"passed": 0, "total": 17}}}))
-            table, proofs = report.build(cost, {"eco": scored}, {})
+            table, proofs = report.build(cost, {"eco": scored})
             lines = table.splitlines()
             self.assertLess(lines.index(next(l for l in lines if l.startswith("| 20-step"))),
                             lines.index(next(l for l in lines if l.startswith("| Eco"))))

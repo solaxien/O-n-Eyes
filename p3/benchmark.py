@@ -38,27 +38,7 @@ class Variant:
 
 VARIANTS = {
     "baseline": Variant("1 · SD v1.4 FP32 · 50 steps", "baseline", "fp32", 50, scheduler="checkpoint"),
-    "baseline-half": Variant("2 · SD v1.4 FP16 · 50 steps", "baseline", "fp16", 50, scheduler="checkpoint"),
-    "tiny25": Variant("3 · Tiny FP16 · 25 steps", "tiny", "fp16", 25, scheduler="checkpoint"),
-    "tiny20": Variant("4 · Tiny FP16 · DPM++ 20", "tiny", "fp16", 20),
-    "taesd": Variant("5 · Tiny FP16 · DPM++ 20 · TAESD", "tiny", "fp16", 20, decoder="taesd"),
-    "tuned": Variant("6 · Tiny FP16 · DPM++ 20 · TAESD · COCO LoRA", "tiny", "fp16", 20, decoder="taesd", lora=True),
-    "balanced": Variant("Tiny FP16 · DPM++ 8 · TAESD · COCO LoRA + CV", "tiny", "fp16", 8, cv=True, decoder="taesd", lora=True),
-    "eco": Variant("Tiny FP16 · DPM++ 6 · TAESD · COCO LoRA + CV · 384 px", "tiny", "fp16", 6, 384, True, decoder="taesd", lora=True),
-    "sd25": Variant("SD v1.4 FP16 · PNDM 25", "baseline", "fp16", 25, scheduler="checkpoint"),
-    "tiny-pndm20": Variant("Tiny FP16 · PNDM 20", "tiny", "fp16", 20, scheduler="checkpoint"),
-    "tuned8": Variant("Tuned · 8 steps · raw", "tiny", "fp16", 8, decoder="taesd", lora=True),
-    "tuned6": Variant("Tuned · 6 steps · raw", "tiny", "fp16", 6, decoder="taesd", lora=True),
-    "tuned6-384": Variant("Tuned · 6 steps · 384 px · raw", "tiny", "fp16", 6, size=384, decoder="taesd", lora=True),
-    "tuned-guidance5": Variant("Tuned · guidance 5 · raw", "tiny", "fp16", 20, decoder="taesd", lora=True, guidance=5.0),
-    # Same weights and sampler settings as the browser profiles, generated on a
-    # GPU so CLIP/KID/FID can use hundreds of images. Phone timings stay separate.
-    "browser-ref20": Variant("Browser reference · 20 steps · 256 px", "tiny", "fp16", 20, 256, decoder="taesd", lora=True),
-    "browser-balanced12": Variant("Browser Balanced · 12 steps · 256 px", "tiny", "fp16", 12, 256, decoder="taesd", lora=True),
-    "browser-eco6": Variant("Browser Eco · 6 steps · 256 px", "tiny", "fp16", 6, 256, decoder="taesd", lora=True),
-    "browser-preview4": Variant("Browser Preview · 4 steps · 256 px", "tiny", "fp16", 4, 256, decoder="taesd", lora=True),
 }
-OFFICIAL_VARIANTS = ("baseline", "baseline-half", "tiny25", "tiny20", "taesd", "tuned")
 CV_VARIANTS = {"raw": "Raw decode", "full": "Full OpenCV pass", "linear": "Bilinear resize"}
 CV_VARIANTS.update({f"omit-{stage}": f"CV without {stage}" for stage in CV_STAGES})
 
@@ -126,11 +106,9 @@ def _run_variant(variant_id: str, rows: list[dict], root: Path, device: str, ada
     variant = VARIANTS[variant_id]
     if variant.lora and adapter is None:
         raise ValueError("This variant requires --adapter pointing to the trained COCO LoRA.")
-    if device == "cuda":
-        torch.backends.cuda.matmul.allow_tf32 = False
-        torch.backends.cudnn.allow_tf32 = False
-    else:
-        torch.set_num_threads(min(torch.get_num_threads(), 8))
+    if device != "cpu":
+        raise ValueError("The offline benchmark runs on the CPU.")
+    torch.set_num_threads(min(torch.get_num_threads(), 8))
     protocol = host_protocol(variant, rows, device, adapter)
     fingerprint = establish_protocol(root, protocol)
     pending = [sample for sample in rows if valid_record(root, sample, fingerprint) is None]
@@ -308,7 +286,7 @@ def main():
     generate.add_argument("--manifest", type=Path, required=True)
     generate.add_argument("--out", type=Path, required=True)
     generate.add_argument("--variant", choices=VARIANTS, required=True)
-    generate.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
+    generate.add_argument("--device", choices=("cpu",), default="cpu")
     generate.add_argument("--limit", type=int)
     generate.add_argument("--adapter", type=Path)
     cv = commands.add_parser("cv")
@@ -317,7 +295,7 @@ def main():
     score = commands.add_parser("score")
     score.add_argument("--manifest", type=Path, required=True)
     score.add_argument("--run", type=Path, nargs="+", required=True)
-    score.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
+    score.add_argument("--device", choices=("cpu",), default="cpu")
     score.add_argument("--fid", action="store_true")
     score.add_argument("--allow-legacy", action="store_true", help="Explicitly score historical outputs without original protocol hashes.")
     report = commands.add_parser("report")

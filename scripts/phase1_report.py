@@ -6,14 +6,12 @@ Inputs are files the pipeline already writes:
   * scores.json files from `python -m p3.benchmark score` run on imported phone
     images (independent CLIP and YOLOS composition scorer).
 
-Optionally a GPU quality run (same weights, hundreds of COCO captions) adds
-CLIP/KID/FID at a valid sample size. Nothing is typed in by hand: every number
-comes from those files, and their SHA-256 hashes are written next to the table.
+Each measurement comes from the input files. Their SHA-256 hashes accompany the table.
 
 Usage:
   python scripts/phase1_report.py --cost .runs/phase1/cost.json \
       --scored baseline=.runs/phase1/scored-baseline ... \
-      [--gpu browser-eco6=.runs/gpu/browser-eco6 ...] --out .runs/phase1/report
+      --out .runs/phase1/report
 """
 
 import argparse
@@ -63,10 +61,10 @@ def run_label(run: dict) -> str:
     return base + (f" ({', '.join(extras)})" if extras else "")
 
 
-def build(cost_path: Path, scored: dict[str, Path], gpu: dict[str, Path]) -> tuple[str, dict]:
+def build(cost_path: Path, scored: dict[str, Path]) -> tuple[str, dict]:
     cost = json.loads(cost_path.read_text())
     runs = {Path(r["directory"]).name: r for r in cost["runs"]}
-    proofs = {"cost": {"path": str(cost_path), "sha256": sha(cost_path)}, "scores": {}, "gpu": {}}
+    proofs = {"cost": {"path": str(cost_path), "sha256": sha(cost_path)}, "scores": {}}
     lines = [
         "## On-device results (Poco F6, current source)",
         "",
@@ -110,23 +108,6 @@ def build(cost_path: Path, scored: dict[str, Path], gpu: dict[str, Path]) -> tup
     if any(not_verifiable.values()):
         lines += ["", f"Clauses the 2D scorer cannot judge (depth, scenery) are excluded and counted separately: "
                       f"{max(v or 0 for v in not_verifiable.values())} per run."]
-    if gpu:
-        lines += [
-            "",
-            "## Distribution quality at a valid sample size (same weights on the laptop GPU)",
-            "",
-            "Generated from COCO val2017 captions with the browser profiles' weights, steps and resolution. "
-            "KID is the primary metric at this size; FID is biased upwards below several thousand images.",
-            "",
-            "| Profile | CLIP ↑ | KID ↓ (± std) | FID ↓ | N |",
-            "| --- | ---: | ---: | ---: | ---: |",
-        ]
-        for name, directory in gpu.items():
-            score_file = directory / "scores.json"
-            s = json.loads(score_file.read_text())
-            proofs["gpu"][name] = {"path": str(score_file), "sha256": sha(score_file)}
-            lines.append(f"| {name} | {fmt(s.get('clip_mean'), 4)} | {fmt(s.get('kid'), 4)} ± {fmt(s.get('kid_std'), 4)} "
-                         f"| {fmt(s.get('fid'), 2)} | {s.get('fid_n', s.get('clip_n'))} |")
     lines += ["", "Source files and hashes: `phase1-provenance.json`."]
     return "\n".join(lines) + "\n", proofs
 
@@ -135,12 +116,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--cost", type=Path, required=True)
     parser.add_argument("--scored", type=pair, nargs="*", default=[], help="RUN_DIR_NAME=SCORED_DIR")
-    parser.add_argument("--gpu", type=pair, nargs="*", default=[], help="LABEL=SCORED_GPU_RUN_DIR")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     if args.out.exists():
         raise SystemExit("Refusing to overwrite an existing report directory.")
-    table, proofs = build(args.cost, dict(args.scored), dict(args.gpu))
+    table, proofs = build(args.cost, dict(args.scored))
     args.out.mkdir(parents=True)
     (args.out / "phase1-results.md").write_text(table, encoding="utf-8")
     (args.out / "phase1-provenance.json").write_text(json.dumps(proofs, indent=2) + "\n", encoding="utf-8")

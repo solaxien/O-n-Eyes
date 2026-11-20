@@ -45,7 +45,7 @@ This exports the text encoder, U-Net, TAESD decoder, and scheduler config as ONN
 
 The browser app implements:
 
-- **CLIP text encoding** via ONNX Runtime WebGPU
+- **CLIP text encoding** via ONNX Runtime WebAssembly
 - **DPM-Solver++ denoising** with configurable step counts (4/6/12)
 - **TAESD decoding** for lightweight latent-to-image conversion
 - **Classical CV post-processing** (speckle repair, bilateral filtering, color correction, quality gate, and a transparent no-reference pixel-health diagnostic) in JavaScript
@@ -84,7 +84,7 @@ p3/                Python utilities (offline export, training and evaluation onl
   export_browser.py   Export PyTorch models to ONNX for browser
   quantize_browser.py Weight-only INT8 U-Net variant with agreement report
   import_browser_run.py Import phone captures for scoring
-  benchmark.py, score.py  GPU benchmark variants and the independent offline scorer (CLIP, YOLOS, FID, KID)
+  benchmark.py, score.py  CPU reference benchmark and independent offline scorer (CLIP, YOLOS, FID, KID)
   train_lora.py    COCO LoRA training (the adapter fused into the browser model)
   models.py        Model checkpoint definitions
   provenance.py    Experiment provenance and hashing
@@ -101,9 +101,6 @@ Everything below writes to a new folder and never overwrites evidence.
 ```powershell
 # Phone: 20-step reference, Balanced, Eco and Preview, then offline scoring and the report table
 powershell -ExecutionPolicy Bypass -File scripts\run_phase1.ps1 -Origin <https-origin> -Tab <tab-id> -Adb <adb.exe> -SelectionStudy
-
-# Laptop GPU: CLIP, KID and FID on 1,000 COCO captions with the same weights and steps
-powershell -ExecutionPolicy Bypass -File scripts\run_gpu_quality.ps1 -Count 1000
 
 # Optional INT8 experiment (keep FP16 unless the phone shows a real gain)
 python -m p3.quantize_browser --export .models/browser/v3 --out .models/browser/v3-int8

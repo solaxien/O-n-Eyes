@@ -32,7 +32,7 @@ class FakeGenerator:
         self.calls.append(prompt)
         return GeneratedImage(Image.new("RGB", (512, 512), "red"), Image.new("RGB", (512, 512), "blue"), {
             "generation_ms": 10 + seed, "revision": "fixed", "requested_steps": profile.steps,
-            "steps": profile.steps, "precision": "fp16", "scheduler": "DPM", "decoder": "taesd",
+            "steps": profile.steps, "precision": "fp32", "scheduler": "DPM", "decoder": "vae",
             "adapter": "fixture", "native_size": 512, "safety_check": False})
 
 
@@ -43,8 +43,8 @@ class EvidenceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(dir=scratch)
         self.addCleanup(self.temporary.cleanup)
         self.out = Path(self.temporary.name)
-        self.root = self.out / "taesd"
-        self.protocol = {"schema": 2, "manifest": ROWS, "settings": asdict(benchmark.VARIANTS["taesd"]),
+        self.root = self.out / "baseline"
+        self.protocol = {"schema": 2, "manifest": ROWS, "settings": asdict(benchmark.VARIANTS["baseline"]),
                          "weights": "base", "adapter": "original", "runtime": "hostA", "code": "v1"}
         FakeGenerator.calls = []
         self.addCleanup(patch.stopall)
@@ -52,7 +52,7 @@ class EvidenceTests(unittest.TestCase):
         patch("p3.benchmark.host_protocol", side_effect=lambda *args: copy.deepcopy(self.protocol)).start()
 
     def run_model(self):
-        benchmark.run_variant("taesd", ROWS, self.out, "cpu", None)
+        benchmark.run_variant("baseline", ROWS, self.out, "cpu", None)
 
     def test_compatible_resume_preserves_timings_and_environment_without_loading(self):
         self.run_model()

@@ -4,13 +4,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
-import os
 
 from PIL import Image
 import torch
 from diffusers import AutoencoderTiny, DPMSolverMultistepScheduler, StableDiffusionPipeline
 
-from p3.models import CHECKPOINTS, load_fp32_components, resolve_model, resolve_taesd
+from p3.models import CHECKPOINTS, resolve_model, resolve_taesd
 from p3.vision import enhance, resize
 
 
@@ -27,37 +26,6 @@ class Profile:
     guidance: float = 7.5
 
 
-PROFILES = {
-    "balanced": Profile("Balanced", 8, 512),
-    "quality": Profile("Full quality", 20, 512),
-    "eco": Profile("Low resource", 6, 384),
-    "cpu": Profile("CPU fallback", 5, 320),
-}
-
-
-def pick_profile(
-    mode: str,
-    device: str,
-    free_bytes: int,
-    remaining: float,
-    estimate: Callable[[str], float],
-) -> tuple[str, str]:
-    if device == "cpu":
-        candidates = ["cpu"]
-        reason = "CPU fallback selected because a CUDA worker is unavailable."
-    elif mode == "eco" or free_bytes < 1_500_000_000:
-        candidates = ["eco"]
-        reason = "Low resource mode selected for the requested mode or available memory."
-    else:
-        requested = "quality" if mode == "auto" else mode
-        candidates = ["quality", "balanced", "eco"] if requested == "quality" else ["balanced", "eco"]
-        reason = "Selected profile fits the current inference budget."
-    for key in candidates:
-        if remaining >= estimate(key):
-            return key, reason
-    raise GenerationError("No generation profile fits the remaining time budget. Try again with a larger budget.")
-
-
 @dataclass
 class GeneratedImage:
     raw: Image.Image
@@ -68,31 +36,20 @@ class GeneratedImage:
 Progress = Callable[[str, int, int], None]
 
 
-def default_device() -> str:
-    device = os.environ.get("P3_DEVICE", "auto")
-    if device == "auto":
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    if device not in {"cuda", "cpu"}:
-        raise ValueError("P3_DEVICE must be auto, cuda, or cpu")
-    if device == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("CUDA is unavailable. Install a CUDA PyTorch build or set P3_DEVICE=cpu.")
-    return device
-
-
 class Generator:
     def __init__(
         self,
         checkpoint: str = "tiny",
-        precision: str = "fp16",
-        device: str = "cuda",
+        precision: str = "fp32",
+        device: str = "cpu",
         *,
         decoder: str = "vae",
         adapter: Path | None = None,
         weight_precision: str | None = None,
         check_safety: bool = True,
     ):
-        if device == "cpu" and precision == "fp16":
-            raise ValueError("Use FP32 on the CPU")
+        if device != "cpu" or precision != "fp32":
+            raise ValueError("The offline generator supports CPU FP32 only.")
         if decoder not in {"vae", "taesd"}:
             raise ValueError("Choose vae or taesd for the decoder")
         self.checkpoint = checkpoint
@@ -102,16 +59,13 @@ class Generator:
         self.decoder = decoder
         self.adapter = adapter
         self.check_safety = check_safety
-        self.dtype = torch.float16 if precision == "fp16" else torch.float32
-        if device == "cpu":
-            torch.set_num_threads(min(torch.get_num_threads(), 8))
+        self.dtype = torch.float32
+        torch.set_num_threads(min(torch.get_num_threads(), 8))
         model_dir, self.model_bytes = resolve_model(checkpoint, self.weight_precision, include_safety=check_safety)
         load_options = {} if check_safety else {
             "safety_checker": None, "feature_extractor": None, "requires_safety_checker": False,
         }
         started = perf_counter()
-        if os.name == "nt" and device == "cuda" and precision == self.weight_precision == "fp32" and not check_safety:
-            load_options.update(load_fp32_components(model_dir))
         self.pipe = StableDiffusionPipeline.from_pretrained(
             model_dir,
             local_files_only=True,
@@ -139,19 +93,11 @@ class Generator:
         self.dpm_scheduler = DPMSolverMultistepScheduler.from_config(
             self.pipe.scheduler.config, algorithm_type="dpmsolver++", solver_order=2
         )
-        self.hardware = torch.cuda.get_device_name() if device == "cuda" else "CPU"
+        self.hardware = "CPU"
         self.load_ms = self._elapsed(started)
 
     def _elapsed(self, started: float) -> float:
-        if self.device == "cuda":
-            torch.cuda.synchronize()
         return round((perf_counter() - started) * 1000, 2)
-
-    def free_bytes(self) -> int:
-        if self.device == "cpu":
-            return 0
-        free, _ = torch.cuda.mem_get_info()
-        return free + torch.cuda.memory_reserved() - torch.cuda.memory_allocated()
 
     @torch.inference_mode()
     def generate(
@@ -164,8 +110,6 @@ class Generator:
         progress: Progress | None = None,
     ) -> GeneratedImage:
         start = perf_counter()
-        if self.device == "cuda":
-            torch.cuda.reset_peak_memory_stats()
         pipe = self.pipe
         scheduler = pipe.scheduler if profile.scheduler == "checkpoint" else self.dpm_scheduler
         if progress:
@@ -242,8 +186,6 @@ class Generator:
             "display_size": image.size[0],
             "seed": seed,
             "model_bytes": self.model_bytes,
-            "peak_vram_bytes": torch.cuda.max_memory_allocated() if self.device == "cuda" else None,
-            "peak_reserved_vram_bytes": torch.cuda.max_memory_reserved() if self.device == "cuda" else None,
             "stages_ms": {
                 "encode": encode_ms,
                 "denoise": denoise_ms,
